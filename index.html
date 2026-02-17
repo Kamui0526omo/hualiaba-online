@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>發粒子 v3.6 - 終極穩定版</title>
+    <title>發粒子 v3.7 - 十盤賽制版</title>
     <style>
         :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; }
         body { font-family: "Consolas", "Microsoft JhengHei", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; }
@@ -20,6 +20,7 @@
         .pattern-label { position: absolute; top: 0; right: 5px; font-size: 0.6rem; color: var(--gold); background: rgba(0,0,0,0.7); padding: 2px 5px; border-radius: 3px; }
         .score-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; width: 100%; }
         .score-box { background: #111; padding: 8px; border-radius: 8px; text-align: center; border-bottom: 2px solid var(--accent); font-size: 0.8rem; }
+        .match-info { color: var(--gold); font-size: 0.75rem; margin-bottom: 5px; letter-spacing: 2px; }
         button { background: #222; color: #fff; border: 1px solid #444; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 4px; }
         button.primary { background: var(--accent); border: none; }
         button.super-reset { background: #331111; color: #888; font-size: 0.6rem; border: none; margin-top: 20px; }
@@ -29,7 +30,7 @@
 </head>
 <body>
     <div id="lobby">
-        <h1 style="color:var(--accent); letter-spacing:8px;">發粒子 <small style="font-size:0.5rem; letter-spacing:0;">v3.6</small></h1>
+        <h1 style="color:var(--accent); letter-spacing:8px;">發粒子 <small style="font-size:0.5rem; letter-spacing:0;">v3.7</small></h1>
         <div id="seat-selection" style="margin-top:30px">
             <button id="btn-join-1" onclick="join(1)">P1 (當家)</button>
             <button id="btn-join-2" onclick="join(2)">P2</button>
@@ -40,6 +41,7 @@
     </div>
 
     <div id="game" class="hidden">
+        <div class="match-info" id="deck-counter">MATCH: 第 1 / 10 副牌</div>
         <div class="score-row" id="score-ui"></div>
         
         <div id="counting-phase" class="phase-container hidden">
@@ -74,8 +76,8 @@
                 <button class="sort-btn" onclick="sortHand('rank')">大小排序</button>
                 <button class="sort-btn" onclick="sortHand('pattern')">牌型排序</button>
             </div>
-            <button id="btn-reset" class="hidden" onclick="initRound()" style="width:100%; margin-top:15px; border-color:var(--accent);">重啟大局指運</button>
-            <button class="super-reset" style="width:100%" onclick="forceCleanDatabase()">🔥 終極重置</button>
+            <button id="btn-reset" class="hidden" onclick="initRound(false)" style="width:100%; margin-top:15px; border-color:var(--accent);">準備下一副牌</button>
+            <button id="btn-final-reset" class="hidden" onclick="initRound(true)" style="width:100%; margin-top:15px; background:var(--gold); color:#000;">大賽結束：全場總結算重置</button>
         </div>
     </div>
 
@@ -91,14 +93,10 @@
     let myID, myHand = [], selectedIdx = [], gameState = {}, currentDetectedPattern = "非牌型";
     const rankMap = { "紅帥":7, "紅仕":6, "紅相":5, "紅俥":4, "紅傌":3, "紅炮":2, "紅兵":1, "黑將":6.5, "黑士":5.5, "黑象":4.5, "黑車":3.5, "黑馬":2.5, "黑包":1.5, "黑卒":0.5 };
 
-    // 核心修復：座位鎖定 Transaction
     window.join = (id) => {
         const targetSeat = `p${id}`;
-        runTransaction(ref(db, `room1/seats/${targetSeat}`), (currentData) => {
-            if (currentData === true) return; // 已經有人了，中斷 Transaction
-            return true;
-        }).then((result) => {
-            if (!result.committed) return alert("❌ 此位置剛被佔走了！");
+        runTransaction(ref(db, `room1/seats/${targetSeat}`), (c) => { if (c === true) return; return true; }).then((res) => {
+            if (!res.committed) return alert("❌ 此位置剛被佔走了！");
             myID = targetSeat;
             document.getElementById('lobby').classList.add('hidden');
             document.getElementById('game').classList.remove('hidden');
@@ -109,11 +107,24 @@
 
     async function checkInitialization() {
         const snap = await get(gameRef);
-        if(!snap.exists() || !snap.val().phase) initRound();
+        if(!snap.exists() || !snap.val().phase) initRound(true);
     }
 
     window.forceCleanDatabase = () => { if(confirm("強制清空？")) remove(gameRef).then(() => location.reload()); };
-    window.initRound = () => { update(gameRef, { phase: "COUNTING", table: {}, finger_picks: {}, p1_hand: [], p2_hand: [], p3_hand: [], p4_hand: [], scores: {p1:0,p2:0,p3:0,p4:0}, dealer: gameState.dealer || "p1" }); };
+    
+    // 改良的初始化：支援積分清零(true)或保留(false)
+    window.initRound = (isFullReset) => {
+        const currentDeck = isFullReset ? 1 : (gameState.deckCount || 1) + 1;
+        const currentScores = isFullReset ? {p1:0,p2:0,p3:0,p4:0} : (gameState.scores || {p1:0,p2:0,p3:0,p4:0});
+        
+        update(gameRef, { 
+            phase: "COUNTING", table: {}, finger_picks: {}, 
+            p1_hand: [], p2_hand: [], p3_hand: [], p4_hand: [], 
+            scores: currentScores,
+            deckCount: currentDeck,
+            dealer: gameState.dealer || "p1"
+        });
+    };
 
     onValue(seatsRef, (snap) => {
         const s = snap.val() || {};
@@ -141,9 +152,12 @@
 
     function updateUI() {
         const scores = gameState.scores || {p1:0, p2:0, p3:0, p4:0}, ph = gameState.phase, table = gameState.table || {};
+        const count = gameState.deckCount || 1;
+        document.getElementById('deck-counter').innerText = `MATCH: 第 ${count} / 10 副牌`;
+        
         document.getElementById('score-ui').innerHTML = [1,2,3,4].map(i => {
-            const s = scores[`p${i}`], final = s + (s >= 32 ? 10 : 0);
-            return `<div class="score-box">P${i}<br><b>${final}</b></div>`;
+            const s = scores[`p${i}`], bonus = s >= 32 ? 10 : 0;
+            return `<div class="score-box">P${i}<br><b>${s+bonus}</b></div>`;
         }).join('');
 
         document.getElementById('current-dealer-name').innerText = gameState.dealer || "p1";
@@ -151,9 +165,8 @@
         
         if(ph === "COUNTING") {
             const picks = gameState.finger_picks || {};
-            const pickCount = Object.keys(picks).length;
-            document.getElementById('diag-msg').innerText = `🎲 已送出指運：${pickCount} / 4`;
-            if(pickCount === 4 && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
+            document.getElementById('diag-msg').innerText = `🎲 已送出指運：${Object.keys(picks).length} / 4`;
+            if(Object.keys(picks).length === 4 && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
         }
 
         const handDiv = document.getElementById('my-hand');
@@ -187,8 +200,11 @@
         else if(ph === "REVEAL_DECISION") diag.innerText = (table[myID] && table[myID].decision === "pending") ? "👉 挑戰還是悶牌？" : "等待其他人決策...";
         else if(ph === "RESOLVING") diag.innerText = "🔄 結算中，進入下一小局...";
 
+        // 結束按鈕邏輯
         const allEmpty = (gameState.p1_hand||[]).length===0 && (gameState.p2_hand||[]).length===0 && (gameState.p3_hand||[]).length===0 && (gameState.p4_hand||[]).length===0;
-        document.getElementById('btn-reset').className = (allEmpty && ph === "FINISHED" && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
+        const isMatchFinished = (count >= 10);
+        document.getElementById('btn-reset').className = (allEmpty && ph === "FINISHED" && !isMatchFinished && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
+        document.getElementById('btn-final-reset').className = (allEmpty && ph === "FINISHED" && isMatchFinished && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
         detectPattern();
     }
 
@@ -252,7 +268,6 @@
 
     function resolveWinner(d) {
         let win = d.head, max = -1;
-        // 核心修復：修正變數拼寫錯誤
         [1,2,3,4].forEach(i => {
             const p = d.table[`p${i}`];
             if(p && p.decision === "reveal") { const pw = getP(p.cards); if(pw > max) { max = pw; win = `p${i}`; } }
@@ -260,8 +275,16 @@
         const trickPts = (d.table[d.head]?.cards?.length || 0) * 4;
         const ns = d.scores || {p1:0, p2:0, p3:0, p4:0}; ns[win] += trickPts;
         const dealerOrder = { "p1": "p2", "p2": "p3", "p3": "p4", "p4": "p1" };
-        const isDeckOver = (d[`${win}_hand`] || []).length === 0; 
-        update(gameRef, { phase: isDeckOver ? "FINISHED" : "HEAD_PLAYING", head: win, table: {}, scores: ns, dealer: isDeckOver ? dealerOrder[d.dealer || "p1"] : (d.dealer || "p1") });
+        
+        // 修正：用該贏家的剩餘手牌來判斷是否為一副牌結束
+        const remaining = (d[`${win}_hand`] || []).length;
+        const isDeckOver = (remaining === 0); 
+        
+        update(gameRef, { 
+            phase: isDeckOver ? "FINISHED" : "HEAD_PLAYING", 
+            head: win, table: {}, scores: ns, 
+            dealer: isDeckOver ? dealerOrder[d.dealer || "p1"] : (d.dealer || "p1") 
+        });
     }
 </script>
 </body>
