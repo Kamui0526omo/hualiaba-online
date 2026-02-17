@@ -3,56 +3,45 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>發粒子 v5.5 - 第一人稱視角</title>
+    <title>發粒子 v5.6 - POV 旗艦版</title>
     <style>
-        :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; --table-green: #0a1f0a; }
+        :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --table-green: #0a1f0a; }
         body { font-family: "Consolas", "Microsoft JhengHei", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; overflow-x: hidden; }
         .hidden { display: none !important; }
 
-        /* 正方形麻將桌佈局 */
-        .table-square {
-            position: relative;
-            width: 300px;
-            height: 300px;
-            background: var(--table-green);
-            border: 10px solid #1a1a1a;
-            border-radius: 15px;
-            margin: 20px 0;
-            box-shadow: inset 0 0 40px rgba(0,0,0,0.8);
+        /* 麻將桌佈局 */
+        .mahjong-table {
+            position: relative; width: 320px; height: 320px;
+            background: var(--table-green); border: 12px solid #1a1a1a;
+            border-radius: 20px; margin: 15px 0;
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.9), 0 15px 35px rgba(0,0,0,0.5);
         }
 
         .view-slot {
-            position: absolute;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-width: 90px;
-            min-height: 90px;
+            position: absolute; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; min-width: 100px; min-height: 100px;
         }
         
-        /* 視角映射：Bottom 是自己，其餘順時針 */
+        /* 視角映射座標 */
         .slot-bottom { bottom: 5px; left: 50%; transform: translateX(-50%); }
-        .slot-left { left: 5px; top: 50%; transform: translateY(-50%); }
+        .slot-left { left: 5px; top: 50%; transform: translateY(-50%) rotate(0deg); }
         .slot-top { top: 5px; left: 50%; transform: translateX(-50%); }
-        .slot-right { right: 5px; top: 50%; transform: translateY(-50%); }
+        .slot-right { right: 5px; top: 50%; transform: translateY(-50%) rotate(0deg); }
 
-        .cards-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; max-width: 120px; }
-        .slot-label { font-size: 0.6rem; color: rgba(255,255,255,0.2); margin: 2px; }
+        .cards-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 5px; width: 100px; min-height: 40px; }
+        .slot-label { font-size: 0.6rem; color: rgba(255,215,0,0.4); margin-top: 5px; font-weight: bold; }
 
-        /* 桌子上的粒子樣式 (修復疊在一起的問題) */
+        /* 桌牌粒子樣式 (修復重疊) */
         .table-piece {
-            position: relative !important; /* 覆蓋全域 piece 的絕對定位 */
-            width: 36px; height: 36px; line-height: 36px;
-            border: 2px solid #333; border-radius: 50%;
-            background: #111; font-weight: bold; font-size: 1rem;
-            text-align: center; display: inline-block;
+            position: relative !important; width: 34px; height: 34px; line-height: 34px;
+            border: 2px solid #333; border-radius: 50%; background: #111;
+            font-weight: bold; font-size: 1rem; text-align: center; display: inline-block;
         }
         .table-piece.red { color: #ff3333; border-color: #8b0000; }
         .table-piece.black { color: #bbb; border-color: #444; }
         .table-piece.covered { background: #222; color: #222; }
 
-        /* 手牌弧形陣列樣式 */
+        /* 八字型弧形手牌 */
         .hand-arc-container { position: relative; height: 180px; width: 340px; margin: 10px auto; z-index: 99; }
         .hand-piece { 
             position: absolute; width: 48px; height: 48px; line-height: 48px; border: 2.5px solid #333; border-radius: 50%; 
@@ -74,18 +63,18 @@
     <div id="lobby">
         <h1 style="color:var(--accent); letter-spacing:10px; margin: 40px 0;">發粒子</h1>
         <div id="seat-selection" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-            <button id="btn-join-1" onclick="join(1)">P1</button>
-            <button id="btn-join-2" onclick="join(2)">P2</button>
-            <button id="btn-join-3" onclick="join(3)">P3</button>
-            <button id="btn-join-4" onclick="join(4)">P4</button>
+            <button id="btn-join-1" onclick="join(1)">P1 (南)</button>
+            <button id="btn-join-2" onclick="join(2)">P2 (東)</button>
+            <button id="btn-join-3" onclick="join(3)">P3 (北)</button>
+            <button id="btn-join-4" onclick="join(4)">P4 (西)</button>
         </div>
-        <button onclick="forceCleanDatabase()" style="margin-top:40px; color:#444; font-size:0.6rem; background:none; border:none; text-decoration: underline;">🔥 房位卡死重置</button>
+        <button onclick="forceCleanDatabase()" style="margin-top:40px; color:#444; font-size:0.6rem; background:none; border:none; text-decoration: underline;">🔥 系統卡死重置</button>
     </div>
 
     <div id="game" class="hidden">
         <div style="font-size:0.6rem; color:#555; margin-bottom:5px; display:flex; justify-content:space-between; width:100%;">
             <span id="match-display">第 1 / 10 副牌</span>
-            <span>你的位置: <b id="my-pos-display" style="color:var(--gold)"></b></span>
+            <span id="pos-name">你的視角: P?</span>
         </div>
         
         <div class="score-row" id="score-ui"></div>
@@ -102,16 +91,17 @@
         </div>
 
         <div id="counting-phase" class="phase-container hidden">
-            <p style="font-size:0.7rem; color:var(--gold);">🎲 指運 (從當家開始)</p>
+            <p style="font-size:0.75rem; color:var(--gold);">🎲 指運 (當家: <span id="dealer-name"></span>)</p>
             <input type="number" id="finger-num" min="0" max="10" value="0" style="width:60px; padding:8px; background:#000; color:#fff; border:1px solid #444; font-size:1.5rem; text-align:center; margin:5px 0;">
-            <button class="primary" style="width:100%;" onclick="submitFinger()">送出數字</button>
+            <br>
+            <button class="primary" style="width:100%;" onclick="submitFinger()">確定送出數字</button>
         </div>
 
-        <div class="table-square">
-            <div class="view-slot slot-bottom" id="view-bottom"><div class="cards-container"></div><div class="slot-label">YOU</div></div>
-            <div class="view-slot slot-left" id="view-left"><div class="cards-container"></div><div class="slot-label">LEFT</div></div>
-            <div class="view-slot slot-top" id="view-top"><div class="cards-container"></div><div class="slot-label">TOP</div></div>
-            <div class="view-slot slot-right" id="view-right"><div class="cards-container"></div><div class="slot-label">RIGHT</div></div>
+        <div class="mahjong-table">
+            <div class="view-slot slot-bottom" id="view-bottom"><div class="cards-container"></div><div class="slot-label">你自己</div></div>
+            <div class="view-slot slot-left" id="view-left"><div class="cards-container"></div><div class="slot-label">對手 A</div></div>
+            <div class="view-slot slot-top" id="view-top"><div class="cards-container"></div><div class="slot-label">對手 B</div></div>
+            <div class="view-slot slot-right" id="view-right"><div class="cards-container"></div><div class="slot-label">對手 C</div></div>
         </div>
 
         <div class="hand-arc-container" id="hand-arc"></div>
@@ -120,7 +110,7 @@
             <button onclick="sortHand('pattern')">牌型</button>
             <button onclick="sortHand('color')">顏色</button>
         </div>
-        <button id="btn-reset" class="hidden" onclick="initRound(false)" style="margin-top:10px; width:100%; border-color:var(--accent);">下一副牌</button>
+        <button id="btn-reset" class="hidden" onclick="initRound(false)" style="margin-top:15px; width:100%; border-color:var(--accent);">準備下一副牌</button>
     </div>
 
 <script type="module">
@@ -142,11 +132,11 @@
         }).then((res) => {
             if (!res.committed) return alert("位置已被佔用");
             myID = target;
-            document.getElementById('my-pos-display').innerText = myID.toUpperCase();
+            document.getElementById('pos-name').innerText = "你的視角: " + myID.toUpperCase();
             document.getElementById('lobby').classList.add('hidden');
             document.getElementById('game').classList.remove('hidden');
             onDisconnect(ref(db, `room1/seats/${myID}`)).remove();
-            get(gameRef).then(snap => { if(!snap.exists()) initRound(true); });
+            get(gameRef).then(snap => { if(!snap.exists() || !snap.val().phase) initRound(true); });
         });
     };
 
@@ -160,12 +150,10 @@
         gameState = d; myHand = d[`${myID}_hand`] || []; updateUI();
     });
 
-    // 視角轉換核心：計算對應 pid
     function getPidByView(view) {
         if(!myID) return null;
-        const myIdx = parseInt(myID.slice(1)); // 1-4
+        const myIdx = parseInt(myID.slice(1));
         const offset = { "bottom": 0, "left": 1, "top": 2, "right": 3 }[view];
-        // 順時針映射公式: (myIdx + offset - 1) % 4 + 1
         return `p${(myIdx + offset - 1) % 4 + 1}`;
     }
 
@@ -173,15 +161,19 @@
         const ph = gameState.phase, table = gameState.table || {};
         document.getElementById('match-display').innerText = `第 ${gameState.deckCount || 1} / 10 副牌`;
         document.getElementById('score-ui').innerHTML = [1,2,3,4].map(i => `<div class="score-box">P${i}<br><b>${(gameState.scores?.[`p${i}`]||0) + ((gameState.scores?.[`p${i}`]||0) >= 32 ? 10 : 0)}</b></div>`).join('');
-        document.getElementById('counting-phase').className = ph === "COUNTING" ? "phase-container" : "hidden";
         
+        const isDealer = myID === (gameState.dealer || "p1");
+        document.getElementById('counting-phase').className = ph === "COUNTING" ? "phase-container" : "hidden";
+        document.getElementById('dealer-name').innerText = (gameState.dealer || "p1").toUpperCase();
+
         if(ph === "COUNTING") {
-            const pickCount = Object.keys(gameState.finger_picks || {}).length;
-            document.getElementById('diag-msg').innerText = `🎲 等待指運: ${pickCount} / 4`;
-            if(pickCount === 4 && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
+            const picks = gameState.finger_picks || {};
+            const pickCount = Object.keys(picks).length;
+            document.getElementById('diag-msg').innerText = `🎲 已送出指運: ${pickCount} / 4`;
+            // 核心：補上 v5.5 遺失的發牌觸發
+            if(pickCount === 4 && isDealer) resolveHeadAndDeal();
         }
 
-        // 弧形手牌陣列
         const arcContainer = document.getElementById('hand-arc');
         arcContainer.innerHTML = "";
         const radius = 240; 
@@ -189,7 +181,7 @@
             const el = document.createElement('div');
             el.className = `hand-piece ${p.includes('紅')?'red':'black'} ${selectedIdx.includes(i)?'selected':''}`;
             el.innerText = p[1];
-            el.onclick = () => togglePiece(i);
+            el.onclick = () => { const idx = selectedIdx.indexOf(i); if(idx > -1) selectedIdx.splice(idx,1); else selectedIdx.push(i); updateUI(); };
             const isLeft = (i < 4), sideIdx = isLeft ? i : (i - 4);
             const startAngle = isLeft ? 150 : 70, endAngle = isLeft ? 110 : 30;
             const angleDeg = startAngle - (sideIdx * ((startAngle - endAngle) / 3));
@@ -200,7 +192,6 @@
             arcContainer.appendChild(el);
         });
 
-        // POV 視角渲染牌桌
         ["bottom", "left", "top", "right"].forEach(view => {
             const pid = getPidByView(view);
             const pData = table[pid];
@@ -208,6 +199,7 @@
             const label = document.querySelector(`#view-${view} .slot-label`);
             label.innerText = pid.toUpperCase() + (pid === gameState.head ? " (頭)" : "");
             
+            // 修復：改用 flex 排列粒子，不再重疊
             container.innerHTML = pData ? pData.cards.map(c => {
                 const isVisible = (pData.revealed || pid === myID);
                 return `<div class="table-piece ${isVisible ? (c.includes('紅')?'red':'black') : 'covered'}">${isVisible ? c[1] : '?'}</div>`;
@@ -237,20 +229,14 @@
         document.getElementById('btn-reset').className = (isF && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
     }
 
-    // (其餘 resolveWinner, sortHand 等邏輯與 5.4 相同)
-    window.togglePiece = (i) => { const idx = selectedIdx.indexOf(i); if(idx > -1) selectedIdx.splice(idx, 1); else selectedIdx.push(i); updateUI(); };
-    window.sortHand = (t) => {
-        const o = {"帥":1,"將":1,"仕":2,"士":2,"相":3,"象":3,"俥":4,"車":4,"傌":5,"馬":5,"炮":6,"包":6,"兵":7,"卒":7};
-        if(t === 'pattern') myHand.sort((a,b) => (o[a[1]]||99)-(o[b[1]]||99) || a[0].localeCompare(b[0]));
-        else if(t === 'color') myHand.sort((a,b) => (a.includes('紅') ? 0 : 1) - (b.includes('紅') ? 0 : 1) || (o[a[1]]||99)-(o[b[1]]||99));
-        update(gameRef, { [`${myID}_hand`]: myHand });
-    };
     window.initRound = (isFull) => {
         const dCount = isFull ? 1 : (gameState.deckCount || 1) + 1;
         const sc = isFull ? {p1:0,p2:0,p3:0,p4:0} : (gameState.scores || {p1:0,p2:0,p3:0,p4:0});
         update(gameRef, { phase: "COUNTING", table: {}, finger_picks: {}, scores: sc, deckCount: dCount, dealer: gameState.dealer || "p1", p1_hand:[], p2_hand:[], p3_hand:[], p4_hand:[] });
     };
+
     window.submitFinger = () => { update(gameRef, { [`finger_picks/${myID}`]: parseInt(document.getElementById('finger-num').value) }); };
+
     function resolveHeadAndDeal() {
         const sum = Object.values(gameState.finger_picks).reduce((a,b) => a+b, 0);
         const dealerIdx = parseInt((gameState.dealer||"p1").slice(1)) - 1;
@@ -260,20 +246,24 @@
         const s = p.sort(() => Math.random() - 0.5);
         update(gameRef, { phase: "HEAD_PLAYING", head, table: {}, finger_picks: null, p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32) });
     }
+
     window.headPlay = () => {
         const sel = selectedIdx.map(i => myHand[i]); 
         update(gameRef, { phase: "FOLLOW_PLAYING", [`table/${myID}`]: { cards: sel, revealed: false, decision: "reveal" }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)) });
         selectedIdx = [];
     };
+
     window.followPlay = () => {
         const need = gameState.table[gameState.head].cards.length;
-        if(selectedIdx.length !== need) return alert(`需投 ${need} 顆`);
+        if(selectedIdx.length !== need) return alert(`需跟投 ${need} 顆`);
         update(gameRef, { [`table/${myID}`]: { cards: selectedIdx.map(i => myHand[i]), revealed: false, decision: "pending" }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)) }).then(() => {
             get(gameRef).then(s => { if(Object.keys(s.val().table || {}).length === 4) update(gameRef, { phase: "HEAD_REVEALING" }); });
         });
         selectedIdx = [];
     };
+
     window.headReveal = () => { update(gameRef, { phase: "REVEAL_DECISION", [`table/${gameState.head}/revealed`]: true }); };
+
     window.revealDecision = (res) => {
         update(gameRef, { [`table/${myID}/decision`]: res ? "reveal" : "muffle", [`table/${myID}/revealed`]: !!res }).then(() => {
             get(gameRef).then(s => {
@@ -282,6 +272,7 @@
             });
         });
     };
+
     function resolveWinner(d) {
         let win = d.head, max = -1;
         [1,2,3,4].forEach(i => { const p = d.table[`p${i}`]; if(p?.decision === "reveal") { const pw = getP(p.cards); if(pw > max) { max = pw; win = `p${i}`; } } });
@@ -290,6 +281,14 @@
         const isDOver = !d.p1_hand?.length && !d.p2_hand?.length && !d.p3_hand?.length && !d.p4_hand?.length;
         update(gameRef, { phase: isDOver ? "FINISHED" : "HEAD_PLAYING", head: win, table: {}, scores: ns, dealer: isDOver ? nextD[d.dealer || "p1"] : (d.dealer || "p1") });
     }
+
+    window.sortHand = (t) => {
+        const o = {"帥":1,"將":1,"仕":2,"士":2,"相":3,"象":3,"俥":4,"車":4,"傌":5,"馬":5,"炮":6,"包":6,"兵":7,"卒":7};
+        if(t === 'pattern') myHand.sort((a,b) => (o[a[1]]||99)-(o[b[1]]||99) || a[0].localeCompare(b[0]));
+        else if(t === 'color') myHand.sort((a,b) => (a.includes('紅') ? 0 : 1) - (b.includes('紅') ? 0 : 1) || (o[a[1]]||99)-(o[b[1]]||99));
+        update(gameRef, { [`${myID}_hand`]: myHand });
+    };
+
     const getP = (c) => {
         if (!c || c.length === 0) return 0;
         const n = c.map(x => x[1]).sort().join(''), r = c.every(x => x.includes('紅'));
@@ -297,7 +296,8 @@
         if (c.length >= 3 && c.every(x => x[1] === "兵" || x[1] === "卒")) return 50 + c.length;
         return c.length === 2 && c[0][1] === c[1][1] && c[0][0] === c[1][0] ? 40 + rankMap[c[0]] : Math.max(...c.map(x => rankMap[x]));
     };
-    window.forceCleanDatabase = () => { if(confirm("重置？")) remove(gameRef).then(() => location.reload()); };
+
+    window.forceCleanDatabase = () => { if(confirm("確定重置？")) remove(gameRef).then(() => location.reload()); };
 </script>
 </body>
 </html>
