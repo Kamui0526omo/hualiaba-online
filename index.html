@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>發粒子 v3.2 - 博弈防呆版</title>
+    <title>發粒子 v3.3 - 穩定座艙版</title>
     <style>
         :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; }
         body { font-family: "Consolas", "Microsoft JhengHei", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; }
@@ -21,7 +21,7 @@
         .score-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; width: 100%; }
         .score-box { background: #111; padding: 8px; border-radius: 8px; text-align: center; border-bottom: 2px solid var(--accent); font-size: 0.8rem; }
         .log { height: 100px; overflow-y: auto; background: #000; font-size: 0.75rem; padding: 8px; color: #00ff41; border: 1px solid #222; text-align: left; }
-        button { background: #222; color: #fff; border: 1px solid #444; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 4px; }
+        button { background: #222; color: #fff; border: 1px solid #444; padding: 12px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 4px; }
         button.primary { background: var(--accent); border: none; }
         button.super-reset { background: #440000; color: #ff9999; font-size: 0.7rem; width: 100%; margin-top: 15px; border: none; }
         button:disabled { background: #1a1a1a; color: #444; border-color: #222; cursor: not-allowed; opacity: 0.6; }
@@ -30,23 +30,24 @@
 </head>
 <body>
     <div id="lobby">
-        <h1 style="color:var(--accent); letter-spacing:8px;">發粒子 <small style="font-size:0.5rem; letter-spacing:0;">v3.2</small></h1>
+        <h1 style="color:var(--accent); letter-spacing:8px;">發粒子 <small style="font-size:0.5rem; letter-spacing:0;">v3.3</small></h1>
         <div id="seat-selection" style="margin-top:30px">
             <button id="btn-join-1" onclick="join(1)">P1 (當家)</button>
             <button id="btn-join-2" onclick="join(2)">P2</button>
             <button id="btn-join-3" onclick="join(3)">P3</button>
             <button id="btn-join-4" onclick="join(4)">P4</button>
         </div>
+        <p style="font-size:0.7rem; color:#666; margin-top:10px;">* 同一位置不可重複進入</p>
         <button class="super-reset" onclick="forceCleanDatabase()">🔥 終極解鎖：清空雲端資料</button>
     </div>
 
     <div id="game" class="hidden">
         <div class="score-row" id="score-ui"></div>
         <div id="counting-phase" class="phase-container hidden">
-            <h3 style="color:var(--gold)">🎲 指運階段 (發牌前)</h3>
-            <p style="font-size:0.8rem">由當家 <span id="current-dealer-name" style="color:white">?</span> 起算</p>
+            <h3 style="color:var(--gold)">🎲 大局開始：指運找頭</h3>
+            <p style="font-size:0.8rem">從當家 <span id="current-dealer-name" style="color:white">?</span> 開始計數</p>
             <input type="number" id="finger-num" min="0" max="10" value="0" style="width:70px; padding:12px; background:#000; color:#fff; border:1px solid #333; font-size:1.5rem; text-align:center;">
-            <button class="primary" onclick="submitFinger()">送出數字</button>
+            <button class="primary" onclick="submitFinger()">確定送出</button>
         </div>
         <div class="table-area" id="table">
             <div class="card-slot" id="slot-p1"><small>P1</small><span class="pattern-label" id="label-p1"></span><div class="cards"></div></div>
@@ -89,17 +90,35 @@
     let myID, myHand = [], selectedIdx = [], gameState = {}, currentDetectedPattern = "非牌型";
     const rankMap = { "紅帥":7, "紅仕":6, "紅相":5, "紅俥":4, "紅傌":3, "紅炮":2, "紅兵":1, "黑將":6.5, "黑士":5.5, "黑象":4.5, "黑車":3.5, "黑馬":2.5, "黑包":1.5, "黑卒":0.5 };
 
+    // 修復座位鎖定邏輯
     window.join = async (id) => {
-        const snap = await get(ref(db, `room1/seats/p${id}`));
-        if (snap.exists() && snap.val() === true) return alert("位置已滿！");
-        myID = `p${id}`; await update(seatsRef, { [myID]: true });
+        const targetSeat = `p${id}`;
+        const snap = await get(ref(db, `room1/seats/${targetSeat}`));
+        if (snap.exists() && snap.val() === true) return alert("❌ 此位置剛被佔走了，請選其他位子！");
+        
+        myID = targetSeat;
+        await update(seatsRef, { [myID]: true });
         document.getElementById('lobby').classList.add('hidden');
         document.getElementById('game').classList.remove('hidden');
+        
+        // 斷線自動釋放位置
         window.onbeforeunload = () => { update(seatsRef, { [myID]: null }); };
     };
 
-    window.forceCleanDatabase = () => { if(confirm("強制清空？")) remove(gameRef).then(() => location.reload()); };
+    window.forceCleanDatabase = () => { if(confirm("確定強制清空回大廳？")) remove(gameRef).then(() => location.reload()); };
     window.initRound = () => { update(gameRef, { phase: "COUNTING", table: null, finger_picks: {}, p1_hand: [], p2_hand: [], p3_hand: [], p4_hand: [] }); };
+
+    onValue(seatsRef, (snap) => {
+        const s = snap.val() || {};
+        [1,2,3,4].forEach(i => {
+            const btn = document.getElementById(`btn-join-${i}`);
+            if(s[`p${i}`]) { 
+                btn.disabled = true; btn.innerText = `P${i} (已滿)`; btn.style.opacity = 0.3;
+            } else {
+                btn.disabled = false; btn.innerText = `P${i} ${i===1?'(當家)':''}`; btn.style.opacity = 1;
+            }
+        });
+    });
 
     onValue(gameRef, (snap) => {
         const d = snap.val(); if(!d) return;
@@ -124,10 +143,19 @@
         }).join('');
 
         document.getElementById('current-dealer-name').innerText = gameState.dealer;
-        const ph = gameState.phase, isH = (myID === gameState.head), table = gameState.table || {};
+        const ph = gameState.phase, table = gameState.table || {};
         
-        document.getElementById('counting-phase').className = ph === "COUNTING" ? "phase-container" : "hidden";
-        if(ph === "COUNTING" && Object.keys(gameState.finger_picks || {}).length === 4 && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
+        // 修復指運判定延遲：偵測到 4 人後，由當家統一執行發牌
+        if(ph === "COUNTING") {
+            document.getElementById('counting-phase').classList.remove('hidden');
+            const picks = gameState.finger_picks || {};
+            const pickCount = Object.keys(picks).length;
+            const diag = document.getElementById('diag-msg');
+            diag.innerText = `🎲 已送出指運：${pickCount} / 4`;
+            if(pickCount === 4 && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
+        } else {
+            document.getElementById('counting-phase').classList.add('hidden');
+        }
 
         const handDiv = document.getElementById('my-hand');
         handDiv.innerHTML = myHand.map((p, i) => `<div class="piece ${p.includes('紅')?'red':'black'} ${selectedIdx.includes(i)?'selected':''}" onclick="togglePiece(${i})">${p[1]}</div>`).join('');
@@ -139,36 +167,29 @@
             label.innerText = (pData && pData.declared) ? pData.declared : "";
         });
 
-        const hasP = !!table[myID];
+        const isH = (myID === gameState.head), hasP = !!table[myID];
         document.getElementById('btn-head-play').className = (ph === "HEAD_PLAYING" && isH) ? "primary" : "hidden";
         document.getElementById('btn-head-reveal').className = (ph === "HEAD_REVEALING" && isH) ? "primary" : "hidden";
         document.getElementById('btn-follow-play').className = (ph === "FOLLOW_PLAYING" && !isH && !hasP) ? "primary" : "hidden";
         
-        // 核心修正：加入比大小防呆邏輯
-        const revealBtn = document.getElementById('btn-reveal-yes');
+        const rBtn = document.getElementById('btn-reveal-yes');
         if (ph === "REVEAL_DECISION" && !isH && hasP && table[myID].decision === "pending") {
-            const headP = getP(table[gameState.head].cards);
-            const myP = getP(table[myID].cards);
-            const canWin = myP > headP;
-            revealBtn.className = "primary";
-            revealBtn.disabled = !canWin;
-            revealBtn.innerText = canWin ? "開牌挑戰" : "不可挑戰 (威力不足)";
-        } else {
-            revealBtn.className = "primary hidden";
-        }
+            const headP = getP(table[gameState.head].cards), myP = getP(table[myID].cards), canW = myP > headP;
+            rBtn.className = "primary"; rBtn.disabled = !canW;
+            rBtn.innerText = canW ? "開牌挑戰" : "不可挑戰 (威力不足)";
+        } else rBtn.className = "primary hidden";
+        
         document.getElementById('btn-reveal-no').className = (ph === "REVEAL_DECISION" && !isH && hasP && table[myID].decision === "pending") ? "" : "hidden";
         
         const diag = document.getElementById('diag-msg');
         if(ph === "HEAD_PLAYING") diag.innerText = isH ? "👉 請選擇粒子投放" : `等待頭家 ${gameState.head} 投放...`;
         else if(ph === "FOLLOW_PLAYING") diag.innerText = hasP ? "等待其他人投放..." : `👉 請跟投 ${table[gameState.head].cards.length} 顆粒子`;
-        else if(ph === "HEAD_REVEALING") diag.innerText = isH ? "👉 全員已投！請點擊掀牌" : `等待頭家 ${gameState.head} 掀牌...`;
-        else if(ph === "REVEAL_DECISION") diag.innerText = (table[myID] && table[myID].decision === "pending") ? "👉 請決定挑戰或悶牌" : "等待其他人決策...";
-        else if(ph === "RESOLVING") diag.innerText = "🔄 正在結算並進入下一小局...";
-        else diag.innerText = "";
+        else if(ph === "HEAD_REVEALING") diag.innerText = isH ? "👉 請點擊掀牌" : `等待頭家 ${gameState.head} 掀牌...`;
+        else if(ph === "REVEAL_DECISION") diag.innerText = (table[myID] && table[myID].decision === "pending") ? "👉 請決定開牌或悶牌" : "等待其他人決策...";
+        else if(ph === "RESOLVING") diag.innerText = "🔄 結算中，即將開始下一局...";
 
         const allEmpty = (gameState.p1_hand||[]).length===0 && (gameState.p2_hand||[]).length===0 && (gameState.p3_hand||[]).length===0 && (gameState.p4_hand||[]).length===0;
         document.getElementById('btn-reset').className = (allEmpty && ph !== "COUNTING" && ph !== "HEAD_PLAYING" && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
-        document.getElementById('log').innerHTML = (gameState.logs || []).reverse().map(l => `<div>> ${l}</div>`).join('');
         detectPattern();
     }
 
@@ -180,7 +201,7 @@
         else if(count === 2 && sel[0][1] === sel[1][1] && sel[0][0] === sel[1][0]) h = "一對";
         else if(count === 3 && (names==="仕帥相" || names==="士將象" || names==="傌俥炮" || names==="包車馬")) h = "一局";
         else if(count >= 3 && sel.every(s => s[1]==="兵" || s[1]==="卒")) h = "兵卒組";
-        document.getElementById('pattern-hint').innerText = `目前組合：${h}`;
+        document.getElementById('pattern-hint').innerText = `預計組合：${h}`;
         currentDetectedPattern = h;
         document.getElementById('btn-head-play').disabled = (h === "非牌型");
     }
@@ -195,16 +216,23 @@
     window.submitFinger = () => { update(gameRef, { [`finger_picks/${myID}`]: parseInt(document.getElementById('finger-num').value) }); };
 
     function resolveHeadAndDeal() {
-        const sum = Object.values(gameState.finger_picks).reduce((a,b) => a+b, 0);
-        const headID = `p${((parseInt(gameState.dealer.slice(1)) - 1 + sum - 1) % 4) + 1}`;
+        const picks = gameState.finger_picks;
+        const sum = Object.values(picks).reduce((a,b) => a+b, 0);
+        const dealerIdx = parseInt(gameState.dealer.slice(1)) - 1;
+        const headIdx = (dealerIdx + sum - 1) % 4;
+        const headID = `p${headIdx + 1}`;
         const p = ["紅帥","紅仕","紅仕","紅相","紅相","紅俥","紅俥","紅傌","紅傌","紅炮","紅炮","紅兵","紅兵","紅兵","紅兵","紅兵","黑將","黑士","黑士","黑象","黑象","黑車","黑車","黑馬","黑馬","黑包","黑包","黑卒","黑卒","黑卒","黑卒","黑卒"];
         const s = p.sort(() => Math.random() - 0.5);
-        update(gameRef, { phase: "HEAD_PLAYING", head: headID, logs: [...gameState.logs, `指運總和 ${sum}。頭家：${headID}`], p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32) });
+        update(gameRef, { 
+            phase: "HEAD_PLAYING", head: headID, table: null, finger_picks: null, 
+            logs: [...(gameState.logs||[]), `指運總和 ${sum}。頭家為：${headID}`], 
+            p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32) 
+        });
     }
 
     window.headPlay = () => {
         const c = selectedIdx.map(i => myHand[i]);
-        update(gameRef, { phase: "FOLLOW_PLAYING", [`table/${myID}`]: { cards: c, revealed: false, declared: currentDetectedPattern, decision: "reveal" }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)), logs: [...gameState.logs, `${myID} 投放粒子 (${currentDetectedPattern})`] });
+        update(gameRef, { phase: "FOLLOW_PLAYING", [`table/${myID}`]: { cards: c, revealed: false, declared: currentDetectedPattern, decision: "reveal" }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)) });
         selectedIdx = [];
     };
 
@@ -212,21 +240,18 @@
         const need = gameState.table[gameState.head].cards.length;
         if(selectedIdx.length !== need) return alert(`需跟投 ${need} 顆！`);
         update(gameRef, { [`table/${myID}`]: { cards: selectedIdx.map(i => myHand[i]), revealed: false, decision: "pending" }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)) }).then(() => {
-            get(gameRef).then(s => { const d = s.val(); if(Object.keys(d.table).length === 4) update(gameRef, { phase: "HEAD_REVEALING", logs: [...d.logs, "全員投完。頭家請掀牌。"]}); });
+            get(gameRef).then(s => { const d = s.val(); if(Object.keys(d.table).length === 4) update(gameRef, { phase: "HEAD_REVEALING" }); });
         });
         selectedIdx = [];
     };
 
-    window.headReveal = () => { update(gameRef, { phase: "REVEAL_DECISION", [`table/${gameState.head}/revealed`]: true, logs: [...gameState.logs, "頭家已掀牌。請決定。"]}); };
+    window.headReveal = () => { update(gameRef, { phase: "REVEAL_DECISION", [`table/${gameState.head}/revealed`]: true }); };
 
     window.revealDecision = (res) => {
         update(gameRef, { [`table/${myID}/decision`]: res ? "reveal" : "muffle", [`table/${myID}/revealed`]: !!res }).then(() => {
             get(gameRef).then(s => {
                 const d = s.val(); let dc = 0; [1,2,3,4].forEach(i => { if(d.table[`p${i}`] && d.table[`p${i}`].decision !== "pending") dc++; });
-                if(dc === 4) {
-                    update(gameRef, { phase: "RESOLVING" });
-                    setTimeout(() => resolveWinner(d), 1500);
-                }
+                if(dc === 4) { update(gameRef, { phase: "RESOLVING" }); setTimeout(() => resolveWinner(d), 1500); }
             });
         });
     };
@@ -236,9 +261,8 @@
         [1,2,3,4].forEach(i => { const p = d.table[`p${i}`]; if(p && p.decision === "reveal") { const pw = getP(p.cards); if(pw > max) { max = pw; win = `p${i}`; } } });
         const ns = {...d.scores}; ns[win] += d.table[d.head].cards.length * 4;
         const dealerOrder = { "p1": "p2", "p2": "p3", "p3": "p4", "p4": "p1" };
-        const remaining = (d[`${win}_hand`] || []).length;
-        const up = { phase: "HEAD_PLAYING", head: win, table: null, scores: ns, logs: [...d.logs, `${win} 奪得分數！`] };
-        if (remaining === 0) { up.dealer = dealerOrder[d.dealer || "p1"]; up.phase = "FINISHED"; }
+        const up = { phase: "HEAD_PLAYING", head: win, table: null, scores: ns };
+        if (d[`${win}_hand`].length === 1) { up.dealer = dealerOrder[d.dealer || "p1"]; up.phase = "FINISHED"; }
         update(gameRef, up);
     }
 </script>
