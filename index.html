@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>發粒子 v6.0 - 專業輪盤版</title>
+    <title>發粒子 v6.1 - 動態輪盤版</title>
     <style>
         :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; --table-green: #0a2d0a; }
         body { font-family: "Consolas", "Microsoft JhengHei", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; overflow-x: hidden; }
@@ -19,15 +19,15 @@
             transform-style: preserve-3d;
         }
 
-        /* 視角與區域高亮 */
-        .view-slot { position: absolute; width: 120px; height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: background 0.3s; border-radius: 15px; }
-        .slot-bottom { bottom: 0; left: 50%; transform: translateX(-50%) translateZ(20px); }
-        .slot-left { left: 0; top: 50%; transform: translateY(-50%) rotateY(20deg) translateZ(10px); }
-        .slot-top { top: 0; left: 50%; transform: translateX(-50%) translateZ(5px); }
-        .slot-right { right: 0; top: 50%; transform: translateY(-50%) rotateY(-20deg) translateZ(10px); }
+        /* 貼合桌面的視角區域 */
+        .view-slot { position: absolute; width: 130px; height: 130px; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all 0.2s ease; border-radius: 20px; z-index: 5; }
+        .slot-bottom { bottom: 0; left: 50%; transform: translateX(-50%) translateZ(1px); }
+        .slot-left { left: 0; top: 50%; transform: translateY(-50%) translateZ(1px); }
+        .slot-top { top: 0; left: 50%; transform: translateX(-50%) translateZ(1px); }
+        .slot-right { right: 0; top: 50%; transform: translateY(-50%) translateZ(1px); }
         
-        /* 亮燈效果 */
-        .active-area { background: rgba(255, 215, 0, 0.15); box-shadow: inset 0 0 20px var(--gold); }
+        /* 輪盤亮燈效果：貼合桌面且帶有金屬光澤 */
+        .active-area { background: rgba(255, 215, 0, 0.25); box-shadow: inset 0 0 30px var(--gold); border: 1px solid rgba(255,215,0,0.3); }
 
         .cards-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; width: 100px; }
         .table-piece { position: relative; width: 32px; height: 32px; line-height: 32px; border: 2px solid #444; border-radius: 50%; background: #111; font-weight: bold; font-size: 0.9rem; text-align: center; display: inline-block; box-shadow: 0 4px 5px rgba(0,0,0,0.6); }
@@ -35,17 +35,11 @@
         .table-piece.black { color: #bbb; border-color: #555; }
         .table-piece.covered { background: #222; color: #222; }
 
-        /* 中央數字顯示 */
-        .table-center-display {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) translateZ(30px);
-            font-size: 3rem; font-weight: 900; color: var(--gold); text-shadow: 0 0 20px var(--gold);
-            pointer-events: none;
-        }
+        /* 中央數字與莊家 */
+        .table-center-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) translateZ(40px); font-size: 3.2rem; font-weight: 900; color: var(--gold); text-shadow: 0 0 25px var(--gold); pointer-events: none; }
+        .dealer-badge { position: absolute; top: 5px; right: 5px; width: 28px; height: 28px; line-height: 28px; background: var(--accent); color: #fff; font-size: 0.8rem; font-weight: bold; border-radius: 6px; text-align: center; border: 2px solid var(--gold); box-shadow: 0 4px 8px rgba(0,0,0,0.5); z-index: 10; }
 
-        /* 莊家標記 */
-        .dealer-badge { position: absolute; top: -10px; right: -10px; width: 28px; height: 28px; line-height: 28px; background: var(--accent); color: #fff; font-size: 0.8rem; font-weight: bold; border-radius: 6px; text-align: center; border: 2px solid var(--gold); box-shadow: 0 4px 8px rgba(0,0,0,0.5); }
-
-        /* 完美對稱弧形手牌 */
+        /* 完美對稱弧形手牌與收攏選牌 */
         .hand-arc-container { position: relative; height: 160px; width: 360px; margin: 5px auto; }
         .hand-piece { 
             position: absolute; width: 50px; height: 50px; line-height: 50px; border: 2.5px solid #333; border-radius: 50%; 
@@ -54,11 +48,7 @@
         }
         .hand-piece.red { color: #ff3333; border-color: #8b0000; }
         .hand-piece.black { color: #bbb; border-color: #444; }
-        
-        /* 選中：往下移至弧線底部水平對齊 */
-        .hand-piece.selected { 
-            border-color: var(--gold); box-shadow: 0 0 30px var(--gold); z-index: 200;
-        }
+        .hand-piece.selected { border-color: var(--gold); box-shadow: 0 0 30px var(--gold); z-index: 200; }
 
         .bottom-action-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; margin-top: 10px; }
         button { background: #1a1a1a; color: #fff; border: 1px solid #444; padding: 12px 18px; border-radius: 10px; cursor: pointer; font-weight: bold; transition: 0.2s; }
@@ -89,10 +79,10 @@
 
         <div class="table-wrap">
             <div class="mahjong-table" id="main-table">
-                <div class="view-slot slot-bottom" id="view-bottom"><div class="cards-container"></div></div>
-                <div class="view-slot slot-left" id="view-left"><div class="cards-container"></div></div>
-                <div class="view-slot slot-top" id="view-top"><div class="cards-container"></div></div>
-                <div class="view-slot slot-right" id="view-right"><div class="cards-container"></div></div>
+                <div class="view-slot" id="view-bottom"><div class="cards-container"></div></div>
+                <div class="view-slot" id="view-left"><div class="cards-container"></div></div>
+                <div class="view-slot" id="view-top"><div class="cards-container"></div></div>
+                <div class="view-slot" id="view-right"><div class="cards-container"></div></div>
                 <div id="center-num" class="table-center-display"></div>
                 <div id="dealer-badge" class="dealer-badge hidden">莊</div>
             </div>
@@ -127,13 +117,13 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
     const gameRef = ref(db, 'room1');
-    let myID, myHand = [], gameState = {}, selectedIdx = [];
+    let myID, myHand = [], gameState = {}, selectedIdx = [], rouletteTimer = null;
     const rankMap = { "紅帥":7, "紅仕":6, "紅相":5, "紅俥":4, "紅傌":3, "紅炮":2, "紅兵":1, "黑將":6.5, "黑士":5.5, "黑象":4.5, "黑車":3.5, "黑馬":2.5, "黑包":1.5, "黑卒":0.5 };
 
     window.join = (id) => {
         const target = `p${id}`;
         runTransaction(ref(db, `room1/seats/${target}`), (curr) => { if (curr === true) return; return true; }).then((res) => {
-            if (!res.committed) return alert("已有人在該位置");
+            if (!res.committed) return alert("位置已被佔用");
             myID = target; document.getElementById('pos-name').innerText = myID.toUpperCase() + " POV";
             document.getElementById('lobby').classList.add('hidden'); document.getElementById('game').classList.remove('hidden');
             onDisconnect(ref(db, `room1/seats/${myID}`)).remove();
@@ -163,23 +153,27 @@
         document.getElementById('score-ui').innerHTML = [1,2,3,4].map(i => `<div class="score-box">P${i}<br><b>${(gameState.scores?.[`p${i}`]||0) + ((gameState.scores?.[`p${i}`]||0) >= 32 ? 10 : 0)}</b></div>`).join('');
         
         document.getElementById('counting-phase').className = ph === "COUNTING" ? "" : "hidden";
-        const centerNumDiv = document.getElementById('center-num');
         
         if(ph === "COUNTING") {
             const picks = gameState.finger_picks || {}; const pickCount = Object.keys(picks).length;
-            const sum = Object.values(picks).reduce((a,b)=>a+b, 0);
-            centerNumDiv.innerText = sum > 0 ? sum : "";
-            
             const missing = [1,2,3,4].filter(i => !picks[`p${i}`]).map(i => "P"+i);
-            document.getElementById('diag-msg').innerText = missing.length ? `⏳ 等待指運：${missing.join(', ')}` : "✅ 全員已送出！";
-            if(pickCount === 4 && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
-        } else {
+            document.getElementById('diag-msg').innerText = missing.length ? `⏳ 等待指運：${missing.join(', ')}` : "✅ 數字到齊，啟動輪盤...";
+            
+            // 核心邏輯：4人到齊且不是正在動畫中
+            if(pickCount === 4 && !gameState.rouletteAnimating && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
+        }
+
+        // 動態輪盤動畫處理
+        const centerNumDiv = document.getElementById('center-num');
+        const activePidForLight = gameState.currentRoulettePid || (ph === "HEAD_PLAYING" ? gameState.head : null);
+        
+        if(gameState.rouletteAnimating) {
+            centerNumDiv.innerText = gameState.rouletteSum || "";
+        } else if (ph === "COUNTING") {
             centerNumDiv.innerText = "";
         }
 
-        // 莊家與亮燈邏輯
         const dealerPid = gameState.dealer || "p1";
-        const activePid = (ph === "HEAD_PLAYING" || ph === "HEAD_REVEALING") ? gameState.head : (ph === "COUNTING" ? null : gameState.head);
         const dealerBadge = document.getElementById('dealer-badge');
 
         ["bottom", "left", "top", "right"].forEach(view => {
@@ -187,11 +181,10 @@
             const slot = document.getElementById(`view-${view}`);
             const container = slot.querySelector(`.cards-container`);
             
-            // 莊家標記
             if(pid === dealerPid) { slot.appendChild(dealerBadge); dealerBadge.classList.remove('hidden'); }
             
-            // 行動高亮
-            slot.classList.toggle('active-area', pid === activePid);
+            // 亮燈邏輯：動畫中跟隨 currentRoulettePid，遊戲中跟隨頭家
+            slot.classList.toggle('active-area', pid === activePidForLight);
 
             container.innerHTML = (table[pid]) ? table[pid].cards.map(c => {
                 const isVisible = (table[pid].revealed || pid === myID);
@@ -199,13 +192,10 @@
             }).join('') : "";
         });
 
-        // 弧形手牌：完全對稱 & 選中向下飛入內側
+        // 弧形手牌
         const arcContainer = document.getElementById('hand-arc');
         arcContainer.innerHTML = "";
-        const radius = 240; 
-        const selCount = selectedIdx.length;
-        const selGap = 55;
-        const selStartX = 180 - ((selCount-1)*selGap/2);
+        const radius = 240, selCount = selectedIdx.length, selGap = 55, selStartX = 180 - ((selCount-1)*selGap/2);
 
         myHand.forEach((p, i) => {
             const el = document.createElement('div');
@@ -214,16 +204,11 @@
             el.onclick = () => { const idx = selectedIdx.indexOf(i); if(idx > -1) selectedIdx.splice(idx,1); else selectedIdx.push(i); updateUI(); };
             
             if (selectedIdx.includes(i)) {
-                // 修改：選中時飛向圓弧內側中心點（往下調）
                 const pos = selectedIdx.indexOf(i);
                 el.style.left = `${selStartX + (pos * selGap) - 25}px`;
-                el.style.top = `100px`; // 向下拉到弧形底部
-                el.style.transform = `rotate(0deg) scale(1.1)`;
+                el.style.top = `100px`; el.style.transform = `rotate(0deg) scale(1.1)`;
             } else {
-                // 未選中：完美對稱弧形
-                const angleRange = 110; 
-                const startAngle = 145; // 左右完全對稱
-                const angleDeg = startAngle - (i * (angleRange / 7));
+                const angleRange = 110, startAngle = 145, angleDeg = startAngle - (i * (angleRange / 7));
                 const angleRad = angleDeg * (Math.PI / 180);
                 el.style.left = `calc(50% + ${radius * Math.cos(angleRad)}px - 25px)`;
                 el.style.top = `${-radius * Math.sin(angleRad) + radius}px`;
@@ -233,15 +218,14 @@
         });
 
         const isH = (myID === gameState.head), hasP = !!table[myID];
-        const btnAct = "action-glow";
-        document.getElementById('btn-head-play').className = (ph === "HEAD_PLAYING" && isH) ? btnAct : "hidden";
-        document.getElementById('btn-head-reveal').className = (ph === "HEAD_REVEALING" && isH) ? btnAct : "hidden";
-        document.getElementById('btn-follow-play').className = (ph === "FOLLOW_PLAYING" && !isH && !hasP) ? btnAct : "hidden";
+        document.getElementById('btn-head-play').className = (ph === "HEAD_PLAYING" && isH) ? "action-glow" : "hidden";
+        document.getElementById('btn-head-reveal').className = (ph === "HEAD_REVEALING" && isH) ? "action-glow" : "hidden";
+        document.getElementById('btn-follow-play').className = (ph === "FOLLOW_PLAYING" && !isH && !hasP) ? "action-glow" : "hidden";
         
         const rBtn = document.getElementById('btn-reveal-yes');
         if (ph === "REVEAL_DECISION" && !isH && hasP && table[myID]?.decision === "pending") {
             const canW = getP(table[myID].cards) > getP(table[gameState.head]?.cards);
-            rBtn.className = btnAct; rBtn.disabled = !canW; rBtn.innerText = canW ? "挑戰" : "威力不足";
+            rBtn.className = "action-glow"; rBtn.disabled = !canW; rBtn.innerText = canW ? "挑戰" : "威力不足";
         } else rBtn.className = "hidden";
         document.getElementById('btn-reveal-no').className = (ph === "REVEAL_DECISION" && !isH && hasP && table[myID]?.decision === "pending") ? "" : "hidden";
 
@@ -252,7 +236,41 @@
         document.getElementById('btn-reset').className = (ph === "FINISHED" || (ph === "HEAD_PLAYING" && allE && gameState.deckCount > 0)) && myID === (gameState.dealer || "p1") ? "" : "hidden";
     }
 
-    // 邏輯模組
+    // 核心指運與輪盤動畫邏輯
+    async function resolveHeadAndDeal() {
+        const snap = await get(gameRef); const d = snap.val();
+        const sum = Object.values(d.finger_picks).reduce((a,b) => a+b, 0);
+        
+        // 4人輸入 0 處理
+        if(sum === 0) {
+            alert("全員輸入0，請重新指運");
+            update(gameRef, { finger_picks: null });
+            return;
+        }
+
+        // 開始輪盤動畫序列
+        await update(gameRef, { rouletteAnimating: true, rouletteSum: sum });
+        
+        let currentIdx = parseInt((d.dealer || "p1").slice(1)); // 從莊家起頭
+        for(let i = 1; i <= sum; i++) {
+            const currentPid = `p${currentIdx}`;
+            await update(gameRef, { currentRoulettePid: currentPid });
+            await new Promise(r => setTimeout(r, 200)); // 動態亮燈間隔
+            currentIdx = (currentIdx % 4) + 1; // 順時針跳轉
+        }
+
+        // 動畫結束，正式分牌
+        const headID = `p${(((parseInt((d.dealer||"p1").slice(1)) + sum - 2) % 4) + 4) % 4 + 1}`;
+        const p = ["紅帥","紅仕","紅仕","紅相","紅相","紅俥","紅俥","紅傌","紅傌","紅炮","紅炮","紅兵","紅兵","紅兵","紅兵","紅兵","黑將","黑士","黑士","黑象","黑象","黑車","黑車","黑馬","黑馬","黑包","黑包","黑卒","黑卒","黑卒","黑卒","黑卒"];
+        const s = p.sort(() => Math.random() - 0.5);
+        
+        update(gameRef, { 
+            phase: "HEAD_PLAYING", head: headID, table: {}, finger_picks: null, 
+            rouletteAnimating: false, currentRoulettePid: null,
+            p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32) 
+        });
+    }
+
     window.initRound = (isFull) => {
         const dCount = isFull ? 1 : (gameState.deckCount || 1) + 1;
         const sc = isFull ? {p1:0,p2:0,p3:0,p4:0} : (gameState.scores || {p1:0,p2:0,p3:0,p4:0});
@@ -260,14 +278,6 @@
         update(gameRef, { phase: "COUNTING", table: {}, finger_picks: {}, scores: sc, deckCount: dCount, dealer: nextD, p1_hand:[], p2_hand:[], p3_hand:[], p4_hand:[] });
     };
     window.submitFinger = () => { update(gameRef, { [`finger_picks/${myID}`]: parseInt(document.getElementById('finger-num').value) }); };
-    function resolveHeadAndDeal() {
-        const sum = Object.values(gameState.finger_picks).reduce((a,b) => a+b, 0);
-        const dealerIdx = parseInt((gameState.dealer||"p1").slice(1)) - 1;
-        const headID = `p${(((dealerIdx + sum - 1) % 4) + 4) % 4 + 1}`;
-        const p = ["紅帥","紅仕","紅仕","紅相","紅相","紅俥","紅俥","紅傌","紅傌","紅炮","紅炮","紅兵","紅兵","紅兵","紅兵","紅兵","黑將","黑士","黑士","黑象","黑象","黑車","黑車","黑馬","黑馬","黑包","黑包","黑卒","黑卒","黑卒","黑卒","黑卒"];
-        const s = p.sort(() => Math.random() - 0.5);
-        update(gameRef, { phase: "HEAD_PLAYING", head: headID, table: {}, finger_picks: null, p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32) });
-    }
     window.headPlay = () => {
         const sel = selectedIdx.map(i => myHand[i]); 
         update(gameRef, { phase: "FOLLOW_PLAYING", [`table/${myID}`]: { cards: sel, revealed: false, decision: "reveal" }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)) });
