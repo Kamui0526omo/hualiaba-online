@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>發粒子 v4.3 - 自動結算進化版</title>
+    <title>發粒子 v4.2 - 鋼鐵流轉版</title>
     <style>
         :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; }
         body { font-family: "Consolas", "Microsoft JhengHei", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; }
@@ -30,7 +30,7 @@
 </head>
 <body>
     <div id="lobby">
-        <h1 style="color:var(--accent); letter-spacing:8px;">發粒子 <small style="font-size:0.5rem; letter-spacing:0;">v4.3</small></h1>
+        <h1 style="color:var(--accent); letter-spacing:8px;">發粒子 <small style="font-size:0.5rem; letter-spacing:0;">v4.2</small></h1>
         <div id="room-selection-ui" class="phase-container">
             <p style="font-size:0.9rem; color:#888;">輸入房號進入</p>
             <input type="text" id="room-input" placeholder="0000" maxlength="4">
@@ -38,14 +38,13 @@
         </div>
         
         <div id="seat-selection" class="phase-container hidden">
-            <p style="font-size:0.75rem; color:var(--gold); margin-bottom:15px;">目前房間: <span id="current-room-id"></span></p>
+            <p style="font-size:0.75rem; color:var(--gold); margin-bottom:15px;">房間: <span id="current-room-id"></span></p>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                 <button id="btn-join-1" onclick="join(1)">P1 (主)</button>
                 <button id="btn-join-2" onclick="join(2)">P2</button>
                 <button id="btn-join-3" onclick="join(3)">P3</button>
                 <button id="btn-join-4" onclick="join(4)">P4</button>
             </div>
-            <button style="margin-top:15px; font-size:0.6rem; color:#444;" onclick="location.reload()">切換房間</button>
         </div>
     </div>
 
@@ -66,30 +65,24 @@
             </div>
             <div id="pattern-hint" style="color:#666; font-size:0.8rem; margin-top:10px;"></div>
         </div>
-
         <div id="counting-phase" class="phase-container hidden">
-            <h3 style="color:var(--gold)">🎲 指運中</h3>
+            <h3 style="color:var(--gold)">🎲 指運階段</h3>
             <p style="font-size:0.8rem">從 <span id="current-dealer-name">?</span> 開始</p>
             <input type="number" id="finger-num" min="0" max="10" value="0" style="width:80px; padding:12px; background:#000; color:#fff; border:1px solid #333; font-size:1.5rem; text-align:center;">
             <button class="primary" onclick="submitFinger()" style="width:100%; margin-top:10px;">送出數字</button>
         </div>
-
         <div class="table-area" id="table">
             <div class="card-slot" id="slot-p1"><small>P1</small><span class="pattern-label" id="label-p1"></span><div class="cards"></div></div>
             <div class="card-slot" id="slot-p2"><small>P2</small><span class="pattern-label" id="label-p2"></span><div class="cards"></div></div>
             <div class="card-slot" id="slot-p3"><small>P3</small><span class="pattern-label" id="label-p3"></span><div class="cards"></div></div>
             <div class="card-slot" id="slot-p4"><small>P4</small><span class="pattern-label" id="label-p4"></span><div class="cards"></div></div>
         </div>
-
         <div class="phase-container">
             <div id="my-hand" style="margin-top:10px; min-height:50px;"></div>
-            <div style="margin-top:15px; display:flex; justify-content:center; gap:10px;">
-                <button class="sort-btn" onclick="sortHand('rank')">大小</button>
-                <button class="sort-btn" onclick="sortHand('pattern')">牌型</button>
-            </div>
-            <button id="btn-reset" class="hidden" onclick="initRound(false)" style="width:100%; margin-top:15px; border-color:var(--accent);">下一副牌</button>
-            <button id="btn-final-reset" class="hidden" onclick="initRound(true)" style="width:100%; margin-top:15px; background:var(--gold); color:#000;">總結算重置</button>
-            <button class="super-reset" onclick="forceCleanDatabase()">🔥 重置本房</button>
+            <div style="margin-top:15px; display:flex; justify-content:center; gap:10px;"><button class="sort-btn" onclick="sortHand('rank')">大小</button><button class="sort-btn" onclick="sortHand('pattern')">牌型</button></div>
+            <button id="btn-reset" class="hidden" onclick="initRound(false)" style="width:100%; margin-top:15px; border-color:var(--accent);">進入下一副牌</button>
+            <button id="btn-final-reset" class="hidden" onclick="initRound(true)" style="width:100%; margin-top:15px; background:var(--gold); color:#000;">大賽結束：全場重置</button>
+            <button class="super-reset" onclick="forceCleanDatabase()">🔥 重置本房資料</button>
         </div>
     </div>
 
@@ -136,7 +129,7 @@
     window.initRound = (isFull) => {
         const dCount = isFull ? 1 : (gameState.deckCount || 1) + 1;
         const scores = isFull ? {p1:0,p2:0,p3:0,p4:0} : (gameState.scores || {p1:0,p2:0,p3:0,p4:0});
-        update(gameRef, { phase: "COUNTING", table: {}, finger_picks: {}, scores: scores, deckCount: dCount, dealer: gameState.dealer || "p1", p1_hand:[], p2_hand:[], p3_hand:[], p4_hand:[] });
+        update(gameRef, { phase: "COUNTING", table: {}, finger_picks: {}, scores: scores, deckCount: dCount, dealer: gameState.dealer || "p1" });
     };
 
     const getP = (c) => {
@@ -160,7 +153,7 @@
             if(pLen === 4 && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
         }
 
-        document.getElementById('my-hand').innerHTML = myHand.length ? myHand.map((p, i) => `<div class="piece ${p.includes('紅')?'red':'black'} ${selectedIdx.includes(i)?'selected':''}" onclick="togglePiece(${i})">${p[1]}</div>`).join('') : "<div style='color:#444'>等待指運中...</div>";
+        document.getElementById('my-hand').innerHTML = myHand.length ? myHand.map((p, i) => `<div class="piece ${p.includes('紅')?'red':'black'} ${selectedIdx.includes(i)?'selected':''}" onclick="togglePiece(${i})">${p[1]}</div>`).join('') : "<div style='color:#444'>等待...</div>";
         [1,2,3,4].forEach(i => {
             const pid = `p${i}`, pData = table[pid];
             document.querySelector(`#slot-p${i} .cards`).innerHTML = pData ? pData.cards.map(c => (pData.revealed || pid == myID) ? `<div class="piece ${c.includes('紅')?'red':'black'}">${c[1]}</div>` : `<div class="piece covered">?</div>`).join('') : "";
@@ -170,6 +163,7 @@
         document.getElementById('btn-head-play').className = (ph === "HEAD_PLAYING" && isH) ? "primary" : "hidden";
         document.getElementById('btn-head-reveal').className = (ph === "HEAD_REVEALING" && isH) ? "primary" : "hidden";
         document.getElementById('btn-follow-play').className = (ph === "FOLLOW_PLAYING" && !isH && !hasP) ? "primary" : "hidden";
+        
         const rBtn = document.getElementById('btn-reveal-yes');
         if (ph === "REVEAL_DECISION" && !isH && hasP && table[myID].decision === "pending") {
             const canW = getP(table[myID].cards) > getP(table[gameState.head]?.cards);
@@ -180,12 +174,12 @@
         const diag = document.getElementById('diag-msg');
         if(ph === "HEAD_PLAYING") diag.innerText = isH ? "👉 該你出牌" : `等待 ${gameState.head} 出牌`;
         else if(ph === "FOLLOW_PLAYING") diag.innerText = hasP ? "等待其他人..." : `👉 請跟投 ${table[gameState.head]?.cards?.length || 0} 顆`;
-        else if(ph === "HEAD_REVEALING") diag.innerText = isH ? "👉 全員已投，點擊掀牌" : `等待頭家掀牌`;
-        else if(ph === "REVEAL_DECISION") diag.innerText = (table[myID]?.decision === "pending") ? "👉 決定挑戰或悶牌" : "等待其他人決策...";
+        else if(ph === "HEAD_REVEALING") diag.innerText = isH ? "👉 請掀牌" : `等待頭家掀牌`;
+        else if(ph === "REVEAL_DECISION") diag.innerText = (table[myID]?.decision === "pending") ? "👉 決定挑戰或悶牌" : "等待其他人";
         else if(ph === "RESOLVING") diag.innerText = "🔄 結算轉場中...";
 
-        const allE = !gameState.p1_hand?.length && !gameState.p2_hand?.length && !gameState.p3_hand?.length && !gameState.p4_hand?.length;
-        const isF = (ph === "FINISHED" || (ph === "HEAD_PLAYING" && allE && gameState.deckCount > 0));
+        const allE = !gameState.p1_hand && !gameState.p2_hand && !gameState.p3_hand && !gameState.p4_hand;
+        const isF = (ph === "FINISHED" || (ph === "HEAD_PLAYING" && allE));
         document.getElementById('btn-reset').className = (isF && gameState.deckCount < 10 && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
         document.getElementById('btn-final-reset').className = (isF && gameState.deckCount >= 10 && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
     }
@@ -251,11 +245,11 @@
         [1,2,3,4].forEach(i => { const p = d.table[`p${i}`]; if(p?.decision === "reveal") { const pw = getP(p.cards); if(pw > max) { max = pw; win = `p${i}`; } } });
         const ns = d.scores || {p1:0, p2:0, p3:0, p4:0}; ns[win] += (d.table[d.head]?.cards?.length || 0) * 4;
         const nextD = { "p1": "p2", "p2": "p3", "p3": "p4", "p4": "p1" };
-        const isDOver = !d.p1_hand?.length && !d.p2_hand?.length && !d.p3_hand?.length && !d.p4_hand?.length;
+        const isDOver = !d.p1_hand && !d.p2_hand && !d.p3_hand && !d.p4_hand;
         update(gameRef, { phase: isDOver ? "FINISHED" : "HEAD_PLAYING", head: win, table: {}, scores: ns, dealer: isDOver ? nextD[d.dealer || "p1"] : (d.dealer || "p1") });
     }
 
-    window.forceCleanDatabase = () => { if(confirm("重置？")) remove(ref(db, `rooms/${roomID}`)).then(() => location.reload()); };
+    window.forceCleanDatabase = () => { if(confirm("重置房間？")) remove(ref(db, `rooms/${roomID}`)).then(() => location.reload()); };
 </script>
 </body>
 </html>
