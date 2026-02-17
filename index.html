@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>發粒子-象棋線上遊戲</title>
+    <style>
+        :root { --bg: #121212; --text: #f0f0f0; --accent: #e74c3c; --card: #1e1e1e; }
+        body { font-family: "Consolas", "Monaco", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        #lobby, #game { width: 100%; max-width: 500px; text-align: center; }
+        .hidden { display: none; }
+        
+        /* 棋子樣式 */
+        .piece { display: inline-block; width: 48px; height: 48px; line-height: 48px; border: 2px solid #444; border-radius: 50%; margin: 6px; cursor: pointer; background: #252525; font-weight: bold; font-size: 1.2rem; transition: transform 0.1s; }
+        .piece.red { color: #ff5252; border-color: #ff5252; }
+        .piece.black { color: #9e9e9e; border-color: #757575; }
+        .piece.covered { background: #333; color: #333; }
+        .piece.selected { transform: scale(1.1); border-color: #f1c40f; box-shadow: 0 0 10px #f1c40f; }
+        
+        .table-area { height: 160px; border: 2px solid #333; border-radius: 10px; margin: 20px 0; display: flex; justify-content: center; align-items: center; gap: 8px; background: #000; }
+        .player-status { font-size: 0.9rem; margin-bottom: 15px; color: #888; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .log { height: 120px; overflow-y: auto; background: #0a0a0a; font-size: 0.8rem; text-align: left; padding: 10px; border: 1px solid #333; border-radius: 5px; color: #00ff00; }
+        
+        button { background: #333; color: white; border: 1px solid #555; padding: 12px 24px; border-radius: 4px; cursor: pointer; margin: 5px; font-weight: bold; }
+        button:hover { background: #444; }
+        button.primary { background: var(--accent); border: none; }
+        
+        #hand-area { margin-top: 20px; padding: 10px; background: var(--card); border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="lobby">
+        <h1 style="color: var(--accent); letter-spacing: 5px;">發粒子</h1>
+        <p style="color: #666;">ONLINE GAME ENGINE v1.1</p>
+        <div id="player-buttons" style="margin-top: 30px;">
+            <button onclick="join(1)">進入 1 號位</button>
+            <button onclick="join(2)">進入 2 號位</button>
+            <button onclick="join(3)">進入 3 號位</button>
+            <button onclick="join(4)">進入 4 號位</button>
+        </div>
+    </div>
+
+    <div id="game" class="hidden">
+        <div class="player-status">位置：<span id="my-name" style="color:white">?</span> | 當前頭家：<span id="current-head" style="color:white">?</span></div>
+        
+        <div class="table-area" id="table">
+            </div>
+
+        <div id="hand-area">
+            <p style="font-size: 0.8rem; color: #888;">我的手牌</p>
+            <div id="my-hand"></div>
+        </div>
+
+        <div id="controls" style="margin-top:25px;">
+            <button id="btn-deal" class="hidden primary" onclick="startGame()">重置並發牌</button>
+            <button onclick="playPiece('open')">開牌</button>
+            <button onclick="playPiece('hidden')">悶牌 (不開)</button>
+        </div>
+
+        <div style="width:100%; text-align:left; margin-top:20px;">
+            <p style="font-size: 0.7rem; color: #555; margin-bottom:5px;">SYSTEM LOG</p>
+            <div id="log" class="log"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+        import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyA15KzswwEHzY_jg2RvFV0T_CAD19EX7MY",
+            authDomain: "hualiaba.firebaseapp.com",
+            databaseURL: "https://hualiaba-default-rtdb.firebaseio.com",
+            projectId: "hualiaba",
+            appId: "1:1066537441904:web:1b5d1c5e4d1b987eb072b5"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const gameRef = ref(db, 'room1');
+
+        let myID = null;
+        let myHand = [];
+        let selectedIdx = -1;
+
+        const allPieces = [
+            "紅帥","紅帥","紅仕","紅仕","紅相","紅相","紅車","紅車","紅馬","紅馬","紅炮","紅炮","紅兵","紅兵","紅兵","紅兵","紅兵",
+            "黑將","黑將","黑士","黑士","黑象","黑象","黑車","黑車","黑馬","黑馬","黑包","黑包","黑卒","黑卒","黑卒","黑卒","黑卒"
+        ];
+
+        window.join = (id) => {
+            myID = `p${id}`;
+            document.getElementById('lobby').classList.add('hidden');
+            document.getElementById('game').classList.remove('hidden');
+            document.getElementById('my-name').innerText = `Player ${id}`;
+            if(id === 1) document.getElementById('btn-deal').classList.remove('hidden');
+        };
+
+        window.startGame = () => {
+            const shuffled = [...allPieces].sort(() => Math.random() - 0.5);
+            set(gameRef, {
+                status: "playing",
+                head: "p1",
+                table: [],
+                log: ["發粒子遊戲初始化完成", "P1 已發牌"],
+                p1_hand: shuffled.slice(0, 8),
+                p2_hand: shuffled.slice(8, 16),
+                p3_hand: shuffled.slice(16, 24),
+                p4_hand: shuffled.slice(24, 32)
+            });
+        };
+
+        onValue(gameRef, (snapshot) => {
+            const data = snapshot.val();
+            if (!data) return;
+
+            myHand = data[`${myID}_hand`] || [];
+            renderHand();
+            renderTable(data.table || []);
+            
+            const logBox = document.getElementById('log');
+            logBox.innerHTML = (data.log || []).map(l => `<div>[LOG] ${l}</div>`).join('');
+            document.getElementById('current-head').innerText = data.head || "?";
+        });
+
+        function renderHand() {
+            const area = document.getElementById('my-hand');
+            area.innerHTML = myHand.map((p, i) => 
+                `<div class="piece ${p.includes('紅')?'red':'black'} ${selectedIdx===i?'selected':''}" onclick="selectPiece(${i})">${p[1]}</div>`
+            ).join('');
+        }
+
+        window.selectPiece = (i) => {
+            selectedIdx = i;
+            renderHand();
+        };
+
+        window.playPiece = (type) => {
+            if (selectedIdx === -1) return;
+            const piece = myHand[selectedIdx];
+            
+            onValue(gameRef, (snapshot) => {
+                const data = snapshot.val();
+                const currentTable = data.table || [];
+                const currentLog = data.log || [];
+                
+                const newHand = [...myHand];
+                newHand.splice(selectedIdx, 1);
+                
+                const playInfo = type === 'open' ? piece : "？";
+                const logMsg = `${myID} 投放了粒子 (${type==='open'?piece:'隱藏'})`;
+                
+                update(gameRef, {
+                    table: [...currentTable, { player: myID, text: playInfo, color: piece.includes('紅')?'red':'black' }],
+                    log: [logMsg, ...currentLog].slice(0, 8),
+                    [`${myID}_hand`]: newHand
+                });
+                
+                selectedIdx = -1;
+            }, { onlyOnce: true });
+        };
+
+        function renderTable(cards) {
+            const area = document.getElementById('table');
+            area.innerHTML = cards.map(c => 
+                `<div class="piece ${c.text==='？'?'covered':c.color}">${c.text==='？'?'？':c.text[1]}</div>`
+            ).join('');
+        }
+    </script>
+</body>
+</html>
