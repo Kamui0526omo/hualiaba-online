@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>發粒子 v4.5 - 正向邏輯版</title>
+    <title>發粒子 v4.6 - 零延遲校驗版</title>
     <style>
         :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; }
         body { font-family: "Consolas", "Microsoft JhengHei", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; }
@@ -29,7 +29,7 @@
 </head>
 <body>
     <div id="lobby">
-        <h1 style="color:var(--accent); letter-spacing:8px;">發粒子 <small style="font-size:0.5rem; letter-spacing:0;">v4.5</small></h1>
+        <h1 style="color:var(--accent); letter-spacing:8px;">發粒子 <small style="font-size:0.5rem; letter-spacing:0;">v4.6</small></h1>
         <div id="room-selection-ui" class="phase-container">
             <input type="text" id="room-input" placeholder="房號 (如 8888)" maxlength="4">
             <button id="btn-enter-room" class="primary" style="width:100%; height:50px; margin-top:10px;" onclick="enterRoom()">進入大廳</button>
@@ -47,7 +47,7 @@
 
     <div id="game" class="hidden">
         <div style="display:flex; justify-content:space-between; font-size:0.6rem; color:#444; margin-bottom:8px;">
-            <span>ROOM: <b id="room-display"></b></span>
+            <span>ROOM: <b id="room-display"></b> | 你是 <b id="my-id-display" style="color:var(--gold)"></b></span>
             <span id="deck-counter">第 1 / 10 副牌</span>
         </div>
         <div class="score-row" id="score-ui"></div>
@@ -64,10 +64,10 @@
         </div>
         <div id="counting-phase" class="phase-container hidden">
             <h3 style="color:var(--gold)">🎲 指運階段</h3>
-            <p style="font-size:0.8rem">從當家 <span id="current-dealer-name">?</span> 開始計數</p>
+            <p style="font-size:0.8rem">當前當家：<span id="current-dealer-name" style="color:white">?</span></p>
             <input type="number" id="finger-num" min="0" max="10" value="0" style="width:80px; padding:12px; background:#000; color:#fff; border:1px solid #333; font-size:1.5rem; text-align:center;">
-            <button class="primary" onclick="submitFinger()" style="width:100%; margin-top:10px;">送出數字</button>
-            <button id="btn-force-deal" class="hidden" onclick="resolveHeadAndDeal()" style="font-size:0.6rem; color:#666; background:none; border:none; margin-top:5px;">(若卡死請點此：手動啟動發牌)</button>
+            <button class="primary" onclick="submitFinger()" style="width:100%; margin-top:10px;">確定送出</button>
+            <p id="missing-players" style="font-size:0.7rem; color:#666; margin-top:5px;"></p>
         </div>
         <div class="table-area" id="table">
             <div class="card-slot" id="slot-p1"><small>P1</small><span class="pattern-label" id="label-p1"></span><div class="cards"></div></div>
@@ -79,8 +79,8 @@
             <div id="my-hand" style="margin-top:10px; min-height:50px;"></div>
             <div style="margin-top:15px; display:flex; justify-content:center; gap:10px;"><button class="sort-btn" onclick="sortHand('rank')">大小</button><button class="sort-btn" onclick="sortHand('pattern')">牌型</button></div>
             <button id="btn-reset" class="hidden" onclick="initRound(false)" style="width:100%; margin-top:15px; border-color:var(--accent);">下一副牌</button>
-            <button id="btn-final-reset" class="hidden" onclick="initRound(true)" style="width:100%; margin-top:15px; background:var(--gold); color:#000;">大賽結束：全場結算重置</button>
-            <button class="super-reset" onclick="forceCleanDatabase()">🔥 重置房內資料</button>
+            <button id="btn-final-reset" class="hidden" onclick="initRound(true)" style="width:100%; margin-top:15px; background:var(--gold); color:#000;">大賽結束：全場重置</button>
+            <button class="super-reset" onclick="forceCleanDatabase()">🔥 重置本房資料</button>
         </div>
     </div>
 
@@ -115,7 +115,10 @@
         const target = `p${id}`;
         runTransaction(ref(db, `rooms/${roomID}/seats/${target}`), (c) => c === true ? undefined : true).then((res) => {
             if (!res.committed) return alert("搶位失敗");
-            myID = target; document.getElementById('lobby').classList.add('hidden'); document.getElementById('game').classList.remove('hidden');
+            myID = target;
+            document.getElementById('my-id-display').innerText = target.toUpperCase();
+            document.getElementById('lobby').classList.add('hidden');
+            document.getElementById('game').classList.remove('hidden');
             onValue(gameRef, (snap) => { 
                 const d = snap.val(); if(!d) { initRound(true); return; }
                 gameState = d; myHand = d[`${myID}_hand`] || []; updateUI(); 
@@ -143,18 +146,26 @@
         document.getElementById('deck-counter').innerText = `第 ${gameState.deckCount || 1} / 10 副牌`;
         document.getElementById('score-ui').innerHTML = [1,2,3,4].map(i => `<div class="score-box">P${i}<br><b>${(gameState.scores?.[`p${i}`]||0) + ((gameState.scores?.[`p${i}`]||0) >= 32 ? 10 : 0)}</b></div>`).join('');
         document.getElementById('counting-phase').className = ph === "COUNTING" ? "phase-container" : "hidden";
-        document.getElementById('current-dealer-name').innerText = gameState.dealer || "p1";
+        document.getElementById('current-dealer-name').innerText = (gameState.dealer || "p1").toUpperCase();
         
         if(ph === "COUNTING") {
-            const picks = gameState.finger_picks || {}; const pLen = Object.keys(picks).length;
-            document.getElementById('diag-msg').innerText = `🎲 已送出指運: ${pLen} / 4`;
-            // 當家負責發牌備援按鈕
-            const isDealer = myID === (gameState.dealer || "p1");
-            document.getElementById('btn-force-deal').className = (pLen === 4 && isDealer) ? "primary" : "hidden";
-            if(pLen === 4 && isDealer) resolveHeadAndDeal();
+            const picks = gameState.finger_picks || {}; 
+            const pickCount = Object.keys(picks).length;
+            document.getElementById('diag-msg').innerText = `🎲 已送出指運: ${pickCount} / 4`;
+            
+            // 顯示誰還沒送數字
+            const missing = [1,2,3,4].filter(i => !picks[`p${i}`]).map(i => "P"+i);
+            document.getElementById('missing-players').innerText = missing.length ? `等待玩家：${missing.join(', ')}` : "正在發牌...";
+
+            // 核心修正：自動發牌鎖，確保只由一個人發牌且 0 被正確處理
+            if(pickCount === 4) {
+                if (gameState.isDealing) return; // 防止重複發牌
+                const isDealer = myID === (gameState.dealer || "p1");
+                if (isDealer) resolveHeadAndDeal();
+            }
         }
 
-        document.getElementById('my-hand').innerHTML = myHand.length ? myHand.map((p, i) => `<div class="piece ${p.includes('紅')?'red':'black'} ${selectedIdx.includes(i)?'selected':''}" onclick="togglePiece(${i})">${p[1]}</div>`).join('') : "<div style='color:#444'>等待分牌中...</div>";
+        document.getElementById('my-hand').innerHTML = myHand.length ? myHand.map((p, i) => `<div class="piece ${p.includes('紅')?'red':'black'} ${selectedIdx.includes(i)?'selected':''}" onclick="togglePiece(${i})">${p[1]}</div>`).join('') : "<div style='color:#666'>手牌空空如也...</div>";
         [1,2,3,4].forEach(i => {
             const pid = `p${i}`, pData = table[pid];
             document.querySelector(`#slot-p${i} .cards`).innerHTML = pData ? pData.cards.map(c => (pData.revealed || pid == myID) ? `<div class="piece ${c.includes('紅')?'red':'black'}">${c[1]}</div>` : `<div class="piece covered">?</div>`).join('') : "";
@@ -165,21 +176,21 @@
         document.getElementById('btn-head-reveal').className = (ph === "HEAD_REVEALING" && isH) ? "primary" : "hidden";
         document.getElementById('btn-follow-play').className = (ph === "FOLLOW_PLAYING" && !isH && !hasP) ? "primary" : "hidden";
         const rBtn = document.getElementById('btn-reveal-yes');
-        if (ph === "REVEAL_DECISION" && !isH && hasP && table[myID].decision === "pending") {
+        if (ph === "REVEAL_DECISION" && !isH && hasP && table[myID]?.decision === "pending") {
             const canW = getP(table[myID].cards) > getP(table[gameState.head]?.cards);
             rBtn.className = "primary"; rBtn.disabled = !canW; rBtn.innerText = canW ? "開牌挑戰" : "威力不足";
         } else rBtn.className = "primary hidden";
-        document.getElementById('btn-reveal-no').className = (ph === "REVEAL_DECISION" && !isH && hasP && table[myID].decision === "pending") ? "" : "hidden";
+        document.getElementById('btn-reveal-no').className = (ph === "REVEAL_DECISION" && !isH && hasP && table[myID]?.decision === "pending") ? "" : "hidden";
 
         const diag = document.getElementById('diag-msg');
-        if(ph === "HEAD_PLAYING") diag.innerText = isH ? "👉 請出牌" : `等待 ${gameState.head} 出牌`;
-        else if(ph === "FOLLOW_PLAYING") diag.innerText = hasP ? "等待其他玩家..." : `👉 請跟投 ${table[gameState.head]?.cards?.length || 0} 顆`;
-        else if(ph === "HEAD_REVEALING") diag.innerText = isH ? "👉 全員已投！請掀牌" : `等待頭家掀牌`;
+        if(ph === "HEAD_PLAYING") diag.innerText = isH ? "👉 該你出牌" : `等待 ${gameState.head.toUpperCase()} 出牌`;
+        else if(ph === "FOLLOW_PLAYING") diag.innerText = hasP ? "等待其他人..." : `👉 請跟投 ${table[gameState.head]?.cards?.length || 0} 顆`;
+        else if(ph === "HEAD_REVEALING") diag.innerText = isH ? "👉 全員已投，點擊掀牌" : `等待頭家掀牌`;
         else if(ph === "REVEAL_DECISION") diag.innerText = (table[myID]?.decision === "pending") ? "👉 決定挑戰或悶牌" : "等待其他人...";
         else if(ph === "RESOLVING") diag.innerText = "🔄 結算轉場中...";
 
         const allE = !gameState.p1_hand?.length && !gameState.p2_hand?.length && !gameState.p3_hand?.length && !gameState.p4_hand?.length;
-        const isF = (ph === "FINISHED" || (ph === "HEAD_PLAYING" && allE && (gameState.deckCount || 0) > 0));
+        const isF = (ph === "FINISHED" || (ph === "HEAD_PLAYING" && allE && gameState.deckCount > 0));
         document.getElementById('btn-reset').className = (isF && gameState.deckCount < 10 && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
         document.getElementById('btn-final-reset').className = (isF && gameState.deckCount >= 10 && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
     }
@@ -202,19 +213,29 @@
 
     window.submitFinger = () => { update(gameRef, { [`finger_picks/${myID}`]: parseInt(document.getElementById('finger-num').value) }); };
 
-    // 核心修正點：確保頭家計算結果永遠是 p1~p4
+    // 改進後的原子化發牌：解決 0 與重複發牌 Bug
     window.resolveHeadAndDeal = async () => {
-        const snap = await get(gameRef); const d = snap.val();
-        if(!d || !d.finger_picks) return;
-        const sum = Object.values(d.finger_picks).reduce((a,b) => a+b, 0);
-        const dealerIdx = parseInt((d.dealer||"p1").slice(1)) - 1;
-        // 修正後的數學公式：(起始索引 + 步數 - 1) % 4，加上校正確保餘數為正
-        const headIdx = (((dealerIdx + sum - 1) % 4) + 4) % 4;
-        const headID = `p${headIdx + 1}`;
-        
-        const p = ["紅帥","紅仕","紅仕","紅相","紅相","紅俥","紅俥","紅傌","紅傌","紅炮","紅炮","紅兵","紅兵","紅兵","紅兵","紅兵","黑將","黑士","黑士","黑象","黑象","黑車","黑車","黑馬","黑馬","黑包","黑包","黑卒","黑卒","黑卒","黑卒","黑卒"];
-        const s = p.sort(() => Math.random() - 0.5);
-        update(gameRef, { phase: "HEAD_PLAYING", head: headID, table: {}, finger_picks: null, p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32) });
+        runTransaction(gameRef, (current) => {
+            if (!current || !current.finger_picks || Object.keys(current.finger_picks).length < 4 || current.isDealing) return;
+            current.isDealing = true; // 標記正在發牌，鎖住防止重複進入
+            return current;
+        }).then(async (result) => {
+            if (!result.committed) return;
+            const d = result.snapshot.val();
+            const sum = Object.values(d.finger_picks).reduce((a,b) => a+b, 0);
+            const dealerIdx = parseInt((d.dealer||"p1").slice(1)) - 1;
+            // 正向餘數校正：JS 數學公式修正
+            const headIdx = (((dealerIdx + sum - 1) % 4) + 4) % 4;
+            const head = `p${headIdx + 1}`;
+            const p = ["紅帥","紅仕","紅仕","紅相","紅相","紅俥","紅俥","紅傌","紅傌","紅炮","紅炮","紅兵","紅兵","紅兵","紅兵","紅兵","黑將","黑士","黑士","黑象","黑象","黑車","黑車","黑馬","黑馬","黑包","黑包","黑卒","黑卒","黑卒","黑卒","黑卒"];
+            const s = p.sort(() => Math.random() - 0.5);
+            
+            await update(gameRef, { 
+                phase: "HEAD_PLAYING", head, table: {}, finger_picks: null, 
+                p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32),
+                isDealing: false // 發牌完畢，解鎖
+            });
+        });
     };
 
     window.headPlay = () => {
@@ -256,7 +277,7 @@
         update(gameRef, { phase: isDOver ? "FINISHED" : "HEAD_PLAYING", head: win, table: {}, scores: ns, dealer: isDOver ? nextD[d.dealer || "p1"] : (d.dealer || "p1") });
     }
 
-    window.forceCleanDatabase = () => { if(confirm("確定重置房內資料？")) remove(ref(db, `rooms/${roomID}`)).then(() => location.reload()); };
+    window.forceCleanDatabase = () => { if(confirm("重置房間？")) remove(ref(db, `rooms/${roomID}`)).then(() => location.reload()); };
 </script>
 </body>
 </html>
