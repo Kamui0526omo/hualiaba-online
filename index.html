@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>發粒子 - 專業對戰版 v2.0</title>
+    <title>發粒子 - 實戰細節版 v2.1</title>
     <style>
-        :root { --bg: #080808; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; }
+        :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; }
         body { font-family: "Consolas", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; }
         .hidden { display: none; }
         #game { width: 100%; max-width: 600px; }
@@ -56,8 +56,10 @@
         <div id="action-ui" class="phase-container">
             <div id="pattern-hint" class="hint-text"></div>
             <div id="control-buttons">
-                <button id="btn-head-play" class="primary hidden" onclick="headPlay()">投放粒子 (蓋牌)</button>
-                <button id="btn-follow-play" class="primary hidden" onclick="followPlay()">投放粒子 (蓋牌)</button>
+                <button id="btn-head-play" class="primary hidden" onclick="headPlay()">投放蓋牌粒子</button>
+                <button id="btn-head-reveal" class="primary hidden" onclick="headReveal()">掀開粒子</button>
+                
+                <button id="btn-follow-play" class="primary hidden" onclick="followPlay()">投放蓋牌粒子</button>
                 <button id="btn-reveal-yes" class="primary hidden" onclick="revealDecision(true)">開牌挑戰</button>
                 <button id="btn-reveal-no" class="hidden" onclick="revealDecision(false)">悶牌不開</button>
             </div>
@@ -69,7 +71,7 @@
                 <div><button class="sort-btn" onclick="sortHand('rank')">大小</button><button class="sort-btn" onclick="sortHand('pattern')">牌型</button></div>
             </div>
             <div id="my-hand" style="margin-top:10px"></div>
-            <button id="btn-reset" class="hidden" onclick="initRound()" style="margin-top:10px; width:100%;">重啟新局 (當家點擊)</button>
+            <button id="btn-reset" class="hidden" onclick="initRound()" style="margin-top:10px; width:100%; border-color:var(--accent);">重啟新局 (當家點擊)</button>
         </div>
         <div class="log" id="log"></div>
     </div>
@@ -92,7 +94,6 @@
         await update(ref(db, 'room1/seats'), { [myID]: true });
         document.getElementById('lobby').classList.add('hidden');
         document.getElementById('game').classList.remove('hidden');
-        if(id===1) document.getElementById('btn-reset').classList.remove('hidden');
         window.onbeforeunload = () => { update(ref(db, 'room1/seats'), { [myID]: null }); };
     };
 
@@ -105,21 +106,14 @@
         });
     });
 
-    // 重啟新局：只重置狀態，不發牌
     window.initRound = () => {
-        update(gameRef, { 
-            phase: "COUNTING", 
-            logs: ["新局開始，等待所有人指運出數。"], 
-            table: {p1:null, p2:null, p3:null, p4:null}, 
-            finger_picks: {},
-            p1_hand: [], p2_hand: [], p3_hand: [], p4_hand: [] // 清空手牌
-        });
+        update(gameRef, { phase: "COUNTING", logs: ["新局開始，進入盲指運階段。"], table: {p1:null, p2:null, p3:null, p4:null}, finger_picks: {}, p1_hand: [], p2_hand: [], p3_hand: [], p4_hand: [] });
     };
 
     onValue(gameRef, (snap) => {
         const d = snap.val(); if(!d) return;
         gameState = d; 
-        if (!gameState.dealer) gameState.dealer = "p1"; // 初始當家為 P1
+        if (!gameState.dealer) gameState.dealer = "p1";
         myHand = d[`${myID}_hand`] || [];
         updateUI();
     });
@@ -145,10 +139,18 @@
         });
 
         const ph = gameState.phase, isH = (myID === gameState.head), hasP = (gameState.table && gameState.table[myID]);
+        
+        // 按鈕顯示邏輯校正
         document.getElementById('btn-head-play').className = (ph === "HEAD_PLAYING" && isH) ? "primary" : "hidden";
+        document.getElementById('btn-head-reveal').className = (ph === "HEAD_REVEALING" && isH) ? "primary" : "hidden";
         document.getElementById('btn-follow-play').className = (ph === "FOLLOW_PLAYING" && !isH && !hasP) ? "primary" : "hidden";
         document.getElementById('btn-reveal-yes').className = (ph === "REVEAL_DECISION" && !isH && hasP && gameState.table[myID].revealed === undefined) ? "primary" : "hidden";
         document.getElementById('btn-reveal-no').className = (ph === "REVEAL_DECISION" && !isH && hasP && gameState.table[myID].revealed === undefined) ? "" : "hidden";
+        
+        // 重置按鈕隱藏邏輯：只有在所有牌都打完時，且當家是自己才出現
+        const allPlayed = (gameState.p1_hand || []).length === 0 && (gameState.p2_hand || []).length === 0 && (gameState.p3_hand || []).length === 0 && (gameState.p4_hand || []).length === 0 && gameState.phase !== "COUNTING";
+        document.getElementById('btn-reset').className = (allPlayed && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
+
         if(ph === "FOLLOW_PLAYING") document.getElementById('need-count').innerText = gameState.table[gameState.head].cards.length;
         document.getElementById('log').innerHTML = (gameState.logs || []).reverse().map(l => `<div>> ${l}</div>`).join('');
         detectPattern();
@@ -175,28 +177,19 @@
 
     window.submitFinger = () => { update(gameRef, { [`finger_picks/${myID}`]: parseInt(document.getElementById('finger-num').value) }); };
 
-    // 關鍵更新：指運後才發牌，且從當家開始數
     function resolveHeadAndDeal() {
         const sum = Object.values(gameState.finger_picks).reduce((a,b) => a+b, 0);
         const dealerIdx = parseInt(gameState.dealer.slice(1)) - 1;
-        const headIdx = (dealerIdx + sum - 1) % 4; // 從當家起算跑位
+        const headIdx = (dealerIdx + sum - 1) % 4;
         const headID = `p${headIdx + 1}`;
-
-        // 洗牌與發牌 (32顆)
         const p = ["紅帥","紅仕","紅仕","紅相","紅相","紅車","紅車","紅馬","紅馬","紅炮","紅炮","紅兵","紅兵","紅兵","紅兵","紅兵","黑將","黑士","黑士","黑象","黑象","黑車","黑車","黑馬","黑馬","黑包","黑包","黑卒","黑卒","黑卒","黑卒","黑卒"];
         const s = p.sort(() => Math.random() - 0.5);
-
-        update(gameRef, { 
-            phase: "HEAD_PLAYING", 
-            head: headID, 
-            logs: [...gameState.logs, `指運總和 ${sum}。頭家為：${headID}，粒子已分發！`],
-            p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32)
-        });
+        update(gameRef, { phase: "HEAD_PLAYING", head: headID, logs: [...gameState.logs, `指運總和 ${sum}。頭家為：${headID}，發粒子中。`], p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32) });
     }
 
     window.headPlay = () => {
         const c = selectedIdx.map(i => myHand[i]);
-        update(gameRef, { phase: "FOLLOW_PLAYING", [`table/${myID}`]: { cards: c, revealed: false }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)), logs: [...gameState.logs, `${myID} (頭家) 已投放粒子。`] });
+        update(gameRef, { phase: "FOLLOW_PLAYING", [`table/${myID}`]: { cards: c, revealed: false }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)), logs: [...gameState.logs, `${myID} (頭家) 已投放蓋牌。`] });
         selectedIdx = [];
     };
 
@@ -206,11 +199,16 @@
         update(gameRef, { [`table/${myID}`]: { cards: selectedIdx.map(i => myHand[i]), revealed: false }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)) }).then(() => {
             get(gameRef).then(s => {
                 const d = s.val(); if(d.table.p1 && d.table.p2 && d.table.p3 && d.table.p4) {
-                    update(gameRef, { phase: "REVEAL_DECISION", [`table/${d.head}/revealed`]: true, logs: [...d.logs, "全體投放完成。頭家開牌，請決定。"]});
+                    update(gameRef, { phase: "HEAD_REVEALING", logs: [...d.logs, "全員蓋牌完成。請頭家掀開粒子。"]});
                 }
             });
         });
         selectedIdx = [];
+    };
+
+    // 關鍵新增：頭家手動掀牌
+    window.headReveal = () => {
+        update(gameRef, { phase: "REVEAL_DECISION", [`table/${gameState.head}/revealed`]: true, logs: [...gameState.logs, "頭家已掀牌。其他人請決定挑戰或悶牌。"]});
     };
 
     window.revealDecision = (res) => {
@@ -235,18 +233,9 @@
             const p = d.table[`p${i}`];
             if(p && (i == d.head.slice(1) || p.revealed)) { const pw = getP(p.cards); if(pw > max) { max = pw; win = `p${i}`; } }
         });
-        
-        const pts = d.table[d.head].cards.length * 4; 
-        const ns = {...d.scores}; ns[win] += pts;
-        const currentCards = d[`p1_hand`].length; // 用手牌剩餘數量判斷是否為最後一輪
-
+        const pts = d.table[d.head].cards.length * 4; const ns = {...d.scores}; ns[win] += pts;
         setTimeout(() => { 
-            const updates = { 
-                phase: "HEAD_PLAYING", head: win, 
-                table: {p1:null, p2:null, p3:null, p4:null}, 
-                scores: ns, logs: [...d.logs, `${win} 奪得本輪 ${pts} 分！`] 
-            };
-            // 關鍵更新：若手牌打完，該輪贏家成為下回合的「當家」
+            const updates = { phase: "HEAD_PLAYING", head: win, table: {p1:null, p2:null, p3:null, p4:null}, scores: ns, logs: [...d.logs, `${win} 奪得本輪 ${pts} 分！`] };
             if (myHand.length === 0) updates.dealer = win; 
             update(gameRef, updates); 
         }, 1500);
