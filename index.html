@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>發粒子 - 輪流當家版 v2.4</title>
+    <title>發粒子 - 超強重置版 v2.7</title>
     <style>
         :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; }
-        body { font-family: "Consolas", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; }
+        body { font-family: "Consolas", "Microsoft JhengHei", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; }
         .hidden { display: none; }
         #game { width: 100%; max-width: 600px; }
-        .piece { display: inline-block; width: 44px; height: 44px; line-height: 44px; border: 2px solid #333; border-radius: 50%; margin: 4px; cursor: pointer; background: #1a1a1a; font-weight: bold; font-size: 1.25rem; text-align: center; transition: all 0.2s; user-select: none; }
-        .piece.red { color: #ff4d4d; border-color: #8b0000; }
-        .piece.black { color: #aaaaaa; border-color: #444; }
+        .piece { display: inline-block; width: 44px; height: 44px; line-height: 44px; border: 2px solid #333; border-radius: 50%; margin: 4px; cursor: pointer; background: #1a1a1a; font-weight: bold; font-size: 1.3rem; text-align: center; transition: all 0.2s; user-select: none; }
+        .piece.red { color: #ff3333; border-color: #8b0000; text-shadow: 0 0 5px rgba(255, 51, 51, 0.3); }
+        .piece.black { color: #bbbbbb; border-color: #444; }
         .piece.selected { border-color: var(--gold); transform: translateY(-8px); box-shadow: 0 5px 15px rgba(255,215,0,0.3); }
         .piece.covered { background: #222; color: #222; border-color: #333; }
         .phase-container { background: var(--card-bg); padding: 15px; border-radius: 12px; margin-bottom: 12px; border: 1px solid #222; text-align: center; }
@@ -22,8 +22,8 @@
         .log { height: 100px; overflow-y: auto; background: #000; font-size: 0.75rem; padding: 8px; color: #00ff41; border: 1px solid #222; text-align: left; }
         button { background: #222; color: #fff; border: 1px solid #444; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; margin: 4px; }
         button.primary { background: var(--accent); border: none; }
+        button.super-reset { background: #440000; color: #ff9999; border: 1px solid #660000; font-size: 0.7rem; width: 100%; margin-top: 20px; }
         button:disabled { opacity: 0.3; cursor: not-allowed; }
-        .seat-taken { background: #111 !important; color: #444 !important; border-color: #222 !important; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -35,25 +35,23 @@
             <button id="btn-join-3" onclick="join(3)">P3</button>
             <button id="btn-join-4" onclick="join(4)">P4</button>
         </div>
+        <button class="super-reset" onclick="forceCleanDatabase()">🔥 終極解鎖：清空雲端資料</button>
     </div>
 
     <div id="game" class="hidden">
         <div class="score-row" id="score-ui"></div>
         <div id="counting-phase" class="phase-container hidden">
-            <h3 style="color:var(--gold)">🎲 大局開始：指運找頭</h3>
-            <p style="font-size:0.8rem">從當家 <span id="current-dealer-name" style="color:white">?</span> 開始計數：</p>
+            <h3 style="color:var(--gold)">🎲 指運階段 (發牌前)</h3>
+            <p style="font-size:0.8rem">由當家 <span id="current-dealer-name" style="color:white">?</span> 起算</p>
             <input type="number" id="finger-num" min="0" max="10" value="0" style="width:70px; padding:12px; background:#000; color:#fff; border:1px solid #333; font-size:1.5rem; text-align:center;">
-            <button class="primary" onclick="submitFinger()">確定送出</button>
-            <div id="counting-status" style="margin-top:10px; font-size:0.8rem; color:#888;"></div>
+            <button class="primary" onclick="submitFinger()">送出數字</button>
         </div>
-
         <div class="table-area" id="table">
             <div class="card-slot" id="slot-p1"><small>P1</small><div class="cards"></div></div>
             <div class="card-slot" id="slot-p2"><small>P2</small><div class="cards"></div></div>
             <div class="card-slot" id="slot-p3"><small>P3</small><div class="cards"></div></div>
             <div class="card-slot" id="slot-p4"><small>P4</small><div class="cards"></div></div>
         </div>
-
         <div id="action-ui" class="phase-container">
             <div id="pattern-hint" style="color:var(--gold); font-size:0.9rem; margin-bottom:10px; height:20px;"></div>
             <div id="control-buttons">
@@ -65,21 +63,21 @@
             </div>
             <div id="follow-info" class="hidden" style="font-size:0.8rem; margin-top:5px; color:#888;">需跟牌數：<span id="need-count">0</span></div>
         </div>
-
         <div class="phase-container">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:0.75rem">我的手牌</span>
-                <div><button class="sort-btn" onclick="sortHand('rank')">大小</button><button class="sort-btn" onclick="sortHand('pattern')">牌型</button></div>
-            </div>
             <div id="my-hand" style="margin-top:10px"></div>
+            <div style="margin-top:15px">
+                <button class="sort-btn" onclick="sortHand('rank')">大小</button>
+                <button class="sort-btn" onclick="sortHand('pattern')">牌型</button>
+            </div>
             <button id="btn-reset" class="hidden" onclick="initRound()" style="margin-top:10px; width:100%; border-color:var(--accent);">一副牌終了：重啟指運</button>
+            <button class="super-reset" onclick="forceCleanDatabase()">🔥 遊戲中解鎖：強制清空回大廳</button>
         </div>
         <div class="log" id="log"></div>
     </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
-    import { getDatabase, ref, set, onValue, update, get } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
+    import { getDatabase, ref, set, onValue, update, get, remove } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js";
 
     const firebaseConfig = { apiKey: "AIzaSyA15KzswwEHzY_jg2RvFV0T_CAD19EX7MY", authDomain: "hualiaba.firebaseapp.com", databaseURL: "https://hualiaba-default-rtdb.firebaseio.com", projectId: "hualiaba", appId: "1:1066537441904:web:1b5d1c5e4d1b987eb072b5" };
     const app = initializeApp(firebaseConfig);
@@ -87,16 +85,21 @@
     const gameRef = ref(db, 'room1');
     const seatsRef = ref(db, 'room1/seats');
     let myID, myHand = [], selectedIdx = [], gameState = {};
-    const rankMap = { "紅帥":7, "紅仕":6, "紅相":5, "紅車":4, "紅馬":3, "紅炮":2, "紅兵":1, "黑將":6.5, "黑士":5.5, "黑象":4.5, "黑車":3.5, "黑馬":2.5, "黑包":1.5, "黑卒":0.5 };
+    const rankMap = { "紅帥":7, "紅仕":6, "紅相":5, "紅俥":4, "紅傌":3, "紅炮":2, "紅兵":1, "黑將":6.5, "黑士":5.5, "黑象":4.5, "黑車":3.5, "黑馬":2.5, "黑包":1.5, "黑卒":0.5 };
 
     window.join = async (id) => {
         const snap = await get(ref(db, `room1/seats/p${id}`));
-        if (snap.exists() && snap.val() === true) return alert("此位子已滿！");
-        myID = `p${id}`;
-        await update(seatsRef, { [myID]: true });
+        if (snap.exists() && snap.val() === true) return alert("位置已滿！");
+        myID = `p${id}`; await update(seatsRef, { [myID]: true });
         document.getElementById('lobby').classList.add('hidden');
         document.getElementById('game').classList.remove('hidden');
         window.onbeforeunload = () => { update(seatsRef, { [myID]: null }); };
+    };
+
+    window.forceCleanDatabase = () => {
+        if(confirm("這會強制踢掉所有人並清空所有分數。確定嗎？")) {
+            remove(gameRef).then(() => location.reload());
+        }
     };
 
     onValue(seatsRef, (snap) => {
@@ -109,17 +112,12 @@
     });
 
     window.initRound = () => {
-        update(gameRef, { 
-            phase: "COUNTING", table: null, finger_picks: {}, 
-            p1_hand: [], p2_hand: [], p3_hand: [], p4_hand: [],
-            logs: ["一副牌已終了。新當家就位，請指運。"] 
-        });
+        update(gameRef, { phase: "COUNTING", table: null, finger_picks: {}, p1_hand: [], p2_hand: [], p3_hand: [], p4_hand: [] });
     };
 
     onValue(gameRef, (snap) => {
         const d = snap.val(); if(!d) return;
-        gameState = d; 
-        if (!gameState.dealer) gameState.dealer = "p1"; // 預設 P1
+        gameState = d; if (!gameState.dealer) gameState.dealer = "p1";
         myHand = d[`${myID}_hand`] || [];
         updateUI();
     });
@@ -127,12 +125,13 @@
     function updateUI() {
         const scores = gameState.scores || {p1:0, p2:0, p3:0, p4:0};
         document.getElementById('score-ui').innerHTML = [1,2,3,4].map(i => {
-            const s = scores[`p${i}`], bonus = s >= 32 ? 10 : 0;
-            return `<div class="score-box">P${i}<br><b>${s+bonus}</b><br><small>${(s+bonus)-80>=0?'+'+((s+bonus)-80):(s+bonus)-80}</small></div>`;
+            const s = scores[`p${i}`], final = s + (s >= 32 ? 10 : 0);
+            return `<div class="score-box">P${i}<br><b>${final}</b><br><small>${final-80>=0?'+'+(final-80):final-80}</small></div>`;
         }).join('');
 
         document.getElementById('current-dealer-name').innerText = gameState.dealer;
-        const ph = gameState.phase;
+        const ph = gameState.phase, isH = (myID === gameState.head), hasP = (gameState.table && gameState.table[myID]);
+        
         document.getElementById('counting-phase').className = ph === "COUNTING" ? "phase-container" : "hidden";
         if(ph === "COUNTING" && Object.keys(gameState.finger_picks || {}).length === 4 && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
 
@@ -145,7 +144,6 @@
             slot.innerHTML = pData ? pData.cards.map(c => (pData.revealed || i == myID.slice(1)) ? `<div class="piece ${c.includes('紅')?'red':'black'}">${c[1]}</div>` : `<div class="piece covered">?</div>`).join('') : "";
         });
 
-        const isH = (myID === gameState.head), hasP = (gameState.table && gameState.table[myID]);
         document.getElementById('btn-head-play').className = (ph === "HEAD_PLAYING" && isH) ? "primary" : "hidden";
         document.getElementById('btn-head-reveal').className = (ph === "HEAD_REVEALING" && isH) ? "primary" : "hidden";
         document.getElementById('btn-follow-play').className = (ph === "FOLLOW_PLAYING" && !isH && !hasP) ? "primary" : "hidden";
@@ -153,7 +151,7 @@
         document.getElementById('btn-reveal-no').className = (ph === "REVEAL_DECISION" && !isH && hasP && gameState.table[myID].revealed === undefined) ? "" : "hidden";
         
         const allEmpty = (gameState.p1_hand||[]).length===0 && (gameState.p2_hand||[]).length===0 && (gameState.p3_hand||[]).length===0 && (gameState.p4_hand||[]).length===0;
-        document.getElementById('btn-reset').className = (allEmpty && ph !== "COUNTING" && ph !== "EMPTY" && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
+        document.getElementById('btn-reset').className = (allEmpty && ph !== "COUNTING" && myID === (gameState.dealer || "p1")) ? "primary" : "hidden";
 
         if(ph === "FOLLOW_PLAYING") document.getElementById('need-count').innerText = gameState.table[gameState.head].cards.length;
         document.getElementById('log').innerHTML = (gameState.logs || []).reverse().map(l => `<div>> ${l}</div>`).join('');
@@ -162,12 +160,12 @@
 
     function detectPattern() {
         if(selectedIdx.length === 0) { document.getElementById('pattern-hint').innerText = ""; return; }
-        const sel = selectedIdx.map(i => myHand[i]), names = sel.map(s => s[1]).sort().join('');
+        const sel = selectedIdx.map(i => myHand[i]), count = sel.length, names = sel.map(s => s[1]).sort().join('');
         let h = "非牌型";
-        if(sel.length === 1) h = "一顆";
-        else if(sel.length === 2 && sel[0][1] === sel[1][1] && sel[0][0] === sel[1][0]) h = "一對";
-        else if(sel.length === 3 && (names==="仕帥相" || names==="士將象" || names==="包車馬")) h = "一局";
-        else if(sel.length >= 3 && sel.every(s => s[1]==="兵" || s[1]==="卒")) h = "兵卒組";
+        if(count === 1) h = "一顆";
+        else if(count === 2 && sel[0][1] === sel[1][1] && sel[0][0] === sel[1][0]) h = "一對";
+        else if(count === 3 && (names==="仕帥相" || names==="士將象" || names==="傌俥炮" || names==="包車馬")) h = "一局";
+        else if(count >= 3 && sel.every(s => s[1]==="兵" || s[1]==="卒")) h = "兵卒組";
         document.getElementById('pattern-hint').innerText = `牌型預判：${h}`;
         document.getElementById('btn-head-play').disabled = (h === "非牌型");
     }
@@ -175,7 +173,7 @@
     window.togglePiece = (i) => { const idx = selectedIdx.indexOf(i); if(idx > -1) selectedIdx.splice(idx, 1); else selectedIdx.push(i); updateUI(); };
     window.sortHand = (t) => {
         if(t === 'rank') myHand.sort((a,b) => rankMap[b] - rankMap[a]);
-        else { const o = {"帥":1, "將":1, "仕":2, "士":2, "相":3, "象":3, "車":4, "馬":5, "炮":6, "包":6, "兵":7, "卒":7}; myHand.sort((a,b) => (o[a[1]] || 99) - (o[b[1]] || 99) || a[0].localeCompare(b[0])); }
+        else { const o = {"帥":1, "將":1, "仕":2, "士":2, "相":3, "象":3, "俥":4, "車":4, "傌":5, "馬":5, "炮":6, "包":6, "兵":7, "卒":7}; myHand.sort((a,b) => (o[a[1]] || 99) - (o[b[1]] || 99) || a[0].localeCompare(b[0])); }
         update(gameRef, { [`${myID}_hand`]: myHand });
     };
 
@@ -186,14 +184,14 @@
         const dealerIdx = parseInt(gameState.dealer.slice(1)) - 1;
         const headIdx = (dealerIdx + sum - 1) % 4;
         const headID = `p${headIdx + 1}`;
-        const p = ["紅帥","紅仕","紅仕","紅相","紅相","紅車","紅車","紅馬","紅馬","紅炮","紅炮","紅兵","紅兵","紅兵","紅兵","紅兵","黑將","黑士","黑士","黑象","黑象","黑車","黑車","黑馬","黑馬","黑包","黑包","黑卒","黑卒","黑卒","黑卒","黑卒"];
+        const p = ["紅帥","紅仕","紅仕","紅相","紅相","紅俥","紅俥","紅傌","紅傌","紅炮","紅炮","紅兵","紅兵","紅兵","紅兵","紅兵","黑將","黑士","黑士","黑象","黑象","黑車","黑車","黑馬","黑馬","黑包","黑包","黑卒","黑卒","黑卒","黑卒","黑卒"];
         const s = p.sort(() => Math.random() - 0.5);
-        update(gameRef, { phase: "HEAD_PLAYING", head: headID, logs: [...gameState.logs, `指運總和 ${sum}。首輪頭家為：${headID}。`], p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32) });
+        update(gameRef, { phase: "HEAD_PLAYING", head: headID, logs: [...gameState.logs, `指運總和 ${sum}。頭家：${headID}`], p1_hand: s.slice(0, 8), p2_hand: s.slice(8, 16), p3_hand: s.slice(16, 24), p4_hand: s.slice(24, 32) });
     }
 
     window.headPlay = () => {
         const c = selectedIdx.map(i => myHand[i]);
-        update(gameRef, { phase: "FOLLOW_PLAYING", [`table/${myID}`]: { cards: c, revealed: false }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)), logs: [...gameState.logs, `${myID} (頭家) 已投放蓋牌。`] });
+        update(gameRef, { phase: "FOLLOW_PLAYING", [`table/${myID}`]: { cards: c, revealed: false }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)), logs: [...gameState.logs, `${myID} 已投放蓋牌。`] });
         selectedIdx = [];
     };
 
@@ -203,14 +201,14 @@
         update(gameRef, { [`table/${myID}`]: { cards: selectedIdx.map(i => myHand[i]), revealed: false }, [`${myID}_hand`]: myHand.filter((_, i) => !selectedIdx.includes(i)) }).then(() => {
             get(gameRef).then(s => {
                 const d = s.val(); if(d.table.p1 && d.table.p2 && d.table.p3 && d.table.p4) {
-                    update(gameRef, { phase: "HEAD_REVEALING", logs: [...d.logs, "全員蓋牌完成。頭家請掀牌。"]});
+                    update(gameRef, { phase: "HEAD_REVEALING", logs: [...d.logs, "全員投完。請頭家掀牌。"]});
                 }
             });
         });
         selectedIdx = [];
     };
 
-    window.headReveal = () => { update(gameRef, { phase: "REVEAL_DECISION", [`table/${gameState.head}/revealed`]: true, logs: [...gameState.logs, "頭家掀牌。請決定挑戰或悶牌。"]}); };
+    window.headReveal = () => { update(gameRef, { phase: "REVEAL_DECISION", [`table/${gameState.head}/revealed`]: true, logs: [...gameState.logs, "頭家已掀牌。請決定挑戰。"]}); };
 
     window.revealDecision = (res) => {
         update(gameRef, { [`table/${myID}/revealed`]: res }).then(() => {
@@ -225,7 +223,7 @@
         let win = d.head, max = -1;
         const getP = (cards) => {
             const ns = cards.map(c => c[1]).sort().join(''), isR = cards.every(c => c.includes('紅'));
-            if (ns === "仕帥相" || ns === "士將象") return isR ? 100 : 95; if (ns === "包車馬") return isR ? 85 : 80;
+            if (ns === "仕帥相" || ns === "士將象") return isR ? 100 : 95; if (ns === "傌俥炮" || ns === "包車馬") return isR ? 85 : 80;
             if (cards.length >= 3 && cards.every(c => c[1] === "兵" || c[1] === "卒")) return 50 + cards.length;
             if (cards.length === 2 && cards[0][1] === cards[1][1] && cards[0][0] === cards[1][0]) return 40 + rankMap[cards[0]];
             return Math.max(...cards.map(c => rankMap[c]));
@@ -234,20 +232,11 @@
             const p = d.table[`p${i}`];
             if(p && (i == d.head.slice(1) || p.revealed)) { const pw = getP(p.cards); if(pw > max) { max = pw; win = `p${i}`; } }
         });
-        
         const pts = d.table[d.head].cards.length * 4; const ns = {...d.scores}; ns[win] += pts;
-        
-        // 核心更新：下一副牌的當家輪值順序
         const dealerOrder = { "p1": "p2", "p2": "p3", "p3": "p4", "p4": "p1" };
-
         setTimeout(() => { 
             const updates = { phase: "HEAD_PLAYING", head: win, table: null, scores: ns, logs: [...d.logs, `${win} 奪得本輪 ${pts} 分！`] };
-            
-            // 如果一副牌打完了 (32顆)，切換當家並進入 FINISHED 狀態
-            if (myHand.length === 0) {
-                updates.dealer = dealerOrder[gameState.dealer || "p1"];
-                updates.phase = "FINISHED";
-            }
+            if (myHand.length === 0) { updates.dealer = dealerOrder[gameState.dealer || "p1"]; updates.phase = "FINISHED"; }
             update(gameRef, updates); 
         }, 1500);
     }
