@@ -3,20 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>發粒子 v6.8 - 指運監控版</title>
+    <title>發粒子 v6.9 - 逆轉裁判版</title>
     <style>
         :root { --bg: #050505; --text: #dcdcdc; --accent: #ff3e3e; --gold: #ffd700; --card-bg: #151515; --table-green: #0a2d0a; }
         body { font-family: "Consolas", "Microsoft JhengHei", monospace; background: var(--bg); color: var(--text); margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow-x: hidden; }
         .hidden { display: none !important; }
 
         #game { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 400px; padding: 10px; box-sizing: border-box; }
-
         .score-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: 100%; margin-bottom: 5px; }
         .score-box { background: #111; padding: 8px 4px; border-radius: 8px; text-align: center; border-bottom: 3px solid var(--accent); font-size: 0.7rem; }
         .match-info { font-size: 0.75rem; color: #555; margin-bottom: 10px; font-weight: bold; width: 100%; text-align: left; }
 
         /* 3D 透視桌型 */
-        .table-wrap { perspective: 1200px; margin: 10px 0; width: 100%; display: flex; justify-content: center; }
+        .table-wrap { perspective: 1200px; margin: 15px 0; width: 100%; display: flex; justify-content: center; }
         .mahjong-table {
             position: relative; width: 310px; height: 280px;
             background: var(--table-green); border: 14px solid #1a1a1a;
@@ -31,19 +30,22 @@
         .slot-top { top: -10px; left: 50%; transform: translateX(-50%) translateZ(30px); }
         .slot-right { right: -20px; top: 50%; transform: translateY(-50%) rotateY(-15deg) translateZ(35px); }
         
+        /* 三角亮燈指示 */
         .indicator-triangle { position: absolute; width: 70px; height: 45px; pointer-events: none; opacity: 0; transition: 0.3s; }
         .slot-bottom .indicator-triangle { bottom: -5px; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
         .slot-left .indicator-triangle { left: -5px; clip-path: polygon(100% 50%, 0% 0%, 0% 100%); }
         .slot-top .indicator-triangle { top: -5px; clip-path: polygon(50% 100%, 0% 0%, 100% 0%); }
         .slot-right .indicator-triangle { right: -5px; clip-path: polygon(0% 50%, 100% 0%, 100% 100%); }
-
         .active-area .indicator-triangle { background: linear-gradient(to top, rgba(255,215,0,0.9), rgba(255,215,0,0.1)); box-shadow: 0 0 35px var(--gold); opacity: 1; }
 
+        /* 棋子樣式：找回紅發光 */
         .piece-base { width: 36px; height: 36px; line-height: 36px; border-radius: 50%; text-align: center; font-weight: bold; position: relative; display: inline-block; box-shadow: 0 5px 8px rgba(0,0,0,0.6); }
         .piece-base.red { color: #ff2222; border: 2.5px solid #990000; background: #220000; text-shadow: 0 0 10px rgba(255, 0, 0, 0.7); }
         .piece-base.black { color: #bbb; border: 2.5px solid #444; background: #111; }
         .piece-base.covered { background: #222; color: #222; border-color: #333; }
 
+        /* 弧形手牌 */
+        .hand-arc-container { position: relative; height: 185px; width: 360px; margin: 0 auto; z-index: 100; }
         .hand-piece { 
             position: absolute; width: 54px; height: 54px; line-height: 54px; border-radius: 50%; 
             cursor: pointer; font-weight: bold; font-size: 1.5rem; text-align: center; 
@@ -53,27 +55,51 @@
         .hand-piece.black { color: #bbb; border: 3px solid #444; background: #111; }
         .hand-piece.selected { border-color: var(--gold) !important; box-shadow: 0 0 35px var(--gold) !important; z-index: 200; }
 
-        .table-center-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) translateZ(60px); font-size: 3.8rem; font-weight: 900; color: var(--gold); text-shadow: 0 0 30px var(--gold); pointer-events: none; }
-        .dealer-badge { position: absolute; top: 0; right: 0; width: 30px; height: 30px; line-height: 30px; background: var(--accent); color: #fff; font-size: 0.85rem; font-weight: bold; border-radius: 5px; text-align: center; border: 2px solid var(--gold); z-index: 20; }
+        /* 逆轉裁判「待った！」特效層 */
+        #wait-overlay {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center;
+            z-index: 9999; pointer-events: none;
+        }
+        .hold-it-img {
+            width: 280px; /* 基礎寬度，會透過動畫放大 */
+            image-rendering: pixelated; /* PS1 像素感優化 */
+            filter: drop-shadow(0 0 15px white);
+        }
+        .anim-pop { animation: objection-pop 0.6s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards, objection-shake 0.1s 0.2s infinite; }
+        @keyframes objection-pop { 
+            0% { transform: scale(0) rotate(-10deg); opacity: 0; }
+            50% { transform: scale(1.4) rotate(5deg); opacity: 1; }
+            100% { transform: scale(1.2) rotate(0deg); opacity: 1; }
+        }
+        @keyframes objection-shake { 
+            0% { transform: scale(1.2) translate(2px, 2px); }
+            50% { transform: scale(1.2) translate(-2px, -2px); }
+            100% { transform: scale(1.2) translate(2px, 2px); }
+        }
 
-        .status-msg { color: var(--gold); font-size: 1.05rem; font-weight: bold; margin: 15px 0; min-height: 1.5rem; text-align: center; width: 100%; text-shadow: 0 0 10px rgba(255,215,0,0.3); }
-
-        .hand-arc-container { position: relative; height: 185px; width: 360px; margin: 0 auto; z-index: 100; }
-        .bottom-action-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; margin-top: 20px; padding-bottom: 25px; }
-        
-        button { background: #1a1a1a; color: #fff; border: 1px solid #444; padding: 12px 22px; border-radius: 12px; cursor: pointer; font-weight: bold; font-size: 1.05rem; transition: 0.2s; }
+        /* 按鈕與提示 */
+        .bottom-action-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; margin-top: 15px; padding-bottom: 25px; }
+        button { background: #1a1a1a; color: #fff; border: 1px solid #444; padding: 12px 22px; border-radius: 12px; cursor: pointer; font-weight: bold; font-size: 1.05rem; }
         button.action-glow { background: var(--gold); color: #000; border: none; box-shadow: 0 0 25px var(--gold); animation: pulse 1.2s infinite; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.06); } 100% { transform: scale(1); } }
+        .status-msg { color: var(--gold); font-size: 1.05rem; font-weight: bold; margin: 12px 0; min-height: 1.5rem; text-align: center; width: 100%; }
+        .table-center-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) translateZ(60px); font-size: 3.8rem; font-weight: 900; color: var(--gold); text-shadow: 0 0 30px var(--gold); pointer-events: none; }
+        .dealer-badge { position: absolute; top: 0; right: 0; width: 30px; height: 30px; line-height: 30px; background: var(--accent); color: #fff; font-size: 0.85rem; font-weight: bold; border-radius: 5px; text-align: center; border: 2px solid var(--gold); z-index: 20; }
     </style>
 </head>
 <body>
+    <div id="wait-overlay">
+        <img src="image_68c3a7.png" class="hold-it-img" id="wait-img" alt="待った！">
+    </div>
+
     <div id="lobby">
         <h1 style="color:var(--accent); letter-spacing:10px; margin: 40px 0;">發粒子</h1>
         <div id="seat-selection" style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
             <button onclick="join(1)">P1 (南)</button><button onclick="join(2)">P2 (東)</button>
             <button onclick="join(3)">P3 (北)</button><button onclick="join(4)">P4 (西)</button>
         </div>
-        <button onclick="forceCleanDatabase()" style="margin-top:40px; color:#444; font-size:0.6rem; background:none; border:none; text-decoration: underline;">🔥 伺服器重置</button>
+        <button onclick="forceCleanDatabase()" style="margin-top:40px; color:#444; font-size:0.6rem; background:none; border:none; text-decoration: underline;">🔥 重置伺服器</button>
     </div>
 
     <div id="game" class="hidden">
@@ -104,7 +130,7 @@
             <button id="btn-head-play" class="hidden" onclick="headPlay()">投放</button>
             <button id="btn-head-reveal" class="hidden" onclick="headReveal()">掀牌</button>
             <button id="btn-follow-play" class="hidden" onclick="followPlay()">跟投</button>
-            <button id="btn-reveal-yes" class="hidden" onclick="revealDecision(true)">挑戰</button>
+            <button id="btn-reveal-yes" class="hidden" onclick="triggerChallenge()">挑戰</button>
             <button id="btn-reveal-no" class="hidden" onclick="revealDecision(false)">悶牌</button>
             <button onclick="sortHand('pattern')">牌型</button>
             <button onclick="sortHand('color')">顏色</button>
@@ -122,6 +148,27 @@
     const gameRef = ref(db, 'room1');
     let myID, myHand = [], gameState = {}, selectedIdx = [];
     const rankMap = { "紅帥":7, "紅仕":6, "紅相":5, "紅俥":4, "紅傌":3, "紅炮":2, "紅兵":1, "黑將":6.5, "黑士":5.5, "黑象":4.5, "黑車":3.5, "黑馬":2.5, "黑包":1.5, "黑卒":0.5 };
+
+    // 音效載入預留
+    const objectionSfx = new Audio('objection.mp3'); 
+
+    // 新增：攔截挑戰動作播放動畫
+    window.triggerChallenge = () => {
+        const overlay = document.getElementById('wait-overlay');
+        const img = document.getElementById('wait-img');
+        
+        overlay.style.display = 'flex';
+        img.classList.add('anim-pop');
+        
+        try { objectionSfx.play(); } catch(e) { console.log("等待音效..."); }
+        
+        // 動畫結束後執行翻牌邏輯
+        setTimeout(() => {
+            overlay.style.display = 'none';
+            img.classList.remove('anim-pop');
+            window.revealDecision(true);
+        }, 1200);
+    };
 
     window.join = (id) => {
         const target = `p${id}`;
@@ -158,7 +205,6 @@
         
         if(ph === "COUNTING") {
             const picks = gameState.finger_picks || {};
-            // 修補：等待名單提示
             const missing = [1,2,3,4].filter(i => picks[`p${i}`] === undefined).map(i => "P"+i);
             document.getElementById('diag-msg').innerText = missing.length ? `⏳ 等待指運：${missing.join(', ')}` : "數字到齊！啟動輪盤...";
             if(Object.keys(picks).length === 4 && !gameState.rouletteAnimating && myID === (gameState.dealer || "p1")) resolveHeadAndDeal();
@@ -211,8 +257,7 @@
         
         const rBtn = document.getElementById('btn-reveal-yes'), mBtn = document.getElementById('btn-reveal-no');
         if (ph === "REVEAL_DECISION" && !isH && hasP && table[myID]?.decision === "pending") {
-            const hp = getPatternInfo(table[gameState.head].cards).power;
-            const mp = getPatternInfo(table[myID].cards).power;
+            const hp = getPatternInfo(table[gameState.head].cards).power, mp = getPatternInfo(table[myID].cards).power;
             const canW = mp > hp;
             rBtn.className = canW ? "action-glow" : ""; rBtn.disabled = !canW; rBtn.innerText = canW ? "挑戰" : "威力不足";
             mBtn.className = canW ? "" : "action-glow"; mBtn.classList.remove('hidden');
@@ -220,19 +265,17 @@
         
         const diag = document.getElementById('diag-msg');
         if(ph === "HEAD_PLAYING") diag.innerText = isH ? "🔥 輪到你首發粒子！" : `等待 ${gameState.head?.toUpperCase()} 出牌`;
-        else if(ph === "FOLLOW_PLAYING") {
-            const headPatt = getPatternInfo(table[gameState.head]?.cards).name;
-            diag.innerText = hasP ? "等待其他人..." : `👉 請跟投 ${headPatt}`;
-        } else if(ph === "FINISHED") diag.innerText = "🏁 本副結束";
+        else if(ph === "FOLLOW_PLAYING") diag.innerText = hasP ? "等待其他人..." : `👉 請跟投 ${getPatternInfo(table[gameState.head]?.cards).name}`;
         
         const allE = !gameState.p1_hand?.length && !gameState.p2_hand?.length && !gameState.p3_hand?.length && !gameState.p4_hand?.length;
         document.getElementById('btn-reset').className = (ph === "FINISHED" || (ph === "HEAD_PLAYING" && allE && gameState.deckCount > 0)) && myID === (gameState.dealer || "p1") ? "primary" : "hidden";
     }
 
+    // 動態輪盤動畫與分牌
     async function resolveHeadAndDeal() {
         const snap = await get(gameRef); const d = snap.val();
         const picks = d.finger_picks; const sum = Object.values(picks).reduce((a,b) => a+b, 0);
-        if(sum === 0 && Object.keys(picks).length === 4) { alert("全員指運 0！請重新開始！"); update(gameRef, { finger_picks: null }); return; }
+        if(sum === 0 && Object.keys(picks).length === 4) { alert("全員 0 點！系統重置重選！"); update(gameRef, { finger_picks: null }); return; }
         await update(gameRef, { rouletteAnimating: true, rouletteSum: sum });
         let currentIdx = parseInt((d.dealer || "p1").slice(1));
         for(let i = 1; i <= sum; i++) {
@@ -261,6 +304,8 @@
         selectedIdx = [];
     };
     window.headReveal = () => { update(gameRef, { phase: "REVEAL_DECISION", [`table/${gameState.head}/revealed`]: true }); };
+    
+    // 翻牌判決邏輯
     window.revealDecision = (res) => {
         update(gameRef, { [`table/${myID}/decision`]: res ? "reveal" : "muffle", [`table/${myID}/revealed`]: !!res }).then(() => {
             get(gameRef).then(s => {
@@ -269,6 +314,7 @@
             });
         });
     };
+
     function resolveWinner(d) {
         let win = d.head, max = -1;
         Object.keys(d.table).forEach(pid => { const p = d.table[pid]; if(p?.decision === "reveal") { const pw = getPatternInfo(p.cards).power; if(pw > max) { max = pw; win = pid; } } });
